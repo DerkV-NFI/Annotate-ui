@@ -520,7 +520,7 @@ function AppContent() {
     try {
       const main = mainRef.current;
       const mainRect = main.getBoundingClientRect();
-      
+
       // 1. Find bounding box of all images and annotations in screen coordinates
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       let foundContent = false;
@@ -578,7 +578,7 @@ function AppContent() {
       // 3. Temporarily strip all backgrounds for true transparency
       const nodesWithBg = main.querySelectorAll('[data-transparent-on-export="true"]');
       const originalBgs = new Map<HTMLElement, string>();
-      
+
       const setTransparent = (el: HTMLElement) => {
         originalBgs.set(el, el.style.backgroundColor);
         el.style.backgroundColor = 'transparent';
@@ -612,10 +612,10 @@ function AppContent() {
         // Coordinates are relative to main container
         const cropX = minX - mainRect.left;
         const cropY = minY - mainRect.top;
-        
+
         canvas.width = width * 2;
         canvas.height = height * 2;
-        
+
         ctx.drawImage(
           img,
           cropX * 2, cropY * 2, width * 2, height * 2, // Source (at scale 2)
@@ -722,29 +722,29 @@ function AppContent() {
         zIndex: 50 // Above SVG overlay
       }}>
         <h1 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Forensic Annotator</h1>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button
-              onClick={saveProject}
-              style={{ ...buttonStyle, backgroundColor: '#2ecc71', color: 'white', border: 'none' }}
-              title="Save project (JSON)"
-            >
-              Save Project
-            </button>
-            <label 
-              style={{ ...buttonStyle, backgroundColor: '#3498db', color: 'white', border: 'none', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
-              title="Load project (JSON)"
-            >
-              Load Project
-              <input type="file" accept=".json" onChange={loadProject} style={{ display: 'none' }} />
-            </label>
-            <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border-color)', margin: '0 8px' }} />
-            <button 
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              style={{ ...buttonStyle, backgroundColor: 'transparent', padding: '4px 8px', fontSize: '1.1rem' }}
-              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
-            >
-              {theme === 'dark' ? '☀️' : '🌙'}
-            </button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            onClick={saveProject}
+            style={{ ...buttonStyle, backgroundColor: '#2ecc71', color: 'white', border: 'none' }}
+            title="Save project (JSON)"
+          >
+            Save Project
+          </button>
+          <label
+            style={{ ...buttonStyle, backgroundColor: '#3498db', color: 'white', border: 'none', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+            title="Load project (JSON)"
+          >
+            Load Project
+            <input type="file" accept=".json" onChange={loadProject} style={{ display: 'none' }} />
+          </label>
+          <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border-color)', margin: '0 8px' }} />
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            style={{ ...buttonStyle, backgroundColor: 'transparent', padding: '4px 8px', fontSize: '1.1rem' }}
+            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           <button
             style={buttonStyle}
             onClick={() => setLayoutMode(prev => prev === 'side-by-side' ? 'top-bottom' : 'side-by-side')}
@@ -1030,19 +1030,6 @@ function AppContent() {
                 style={{ ...buttonStyle, width: '100%', backgroundColor: 'transparent', color: 'var(--accent-color)' }}
               >
                 Export CSV Data
-              </button>
-              <button
-                onClick={() => {
-                  const blob = new Blob([JSON.stringify(annotations, null, 2)], { type: 'application/json' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = 'annotations.json';
-                  a.click();
-                }}
-                style={{ ...buttonStyle, border: 'none', width: '100%', backgroundColor: 'transparent', fontSize: '0.75rem', color: 'var(--text-muted)' }}
-              >
-                Export JSON (Debug)
               </button>
             </div>
           )}
