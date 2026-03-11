@@ -1,0 +1,81 @@
+:root {
+  /* Default Dark Theme */
+  --bg-color: #121212;
+  --panel-bg: #1e1e1e;
+  --text-main: #e0e0e0;
+  --text-muted: #a0a0a0;
+  --border-color: #333333;
+  --input-bg: #121212; /* Dark grey for text fields */
+  --accent-color: #007acc;
+  --accent-hover: #0098ff;
+  --danger-color: #f44336;
+  --btn-text: #ffffff;
+  --btn-secondary-text: #e0e0e0;
+}
+
+
+[data-theme="light"] {
+  --bg-color: #e0e0e0; /* Very light grey for workspace */
+  --panel-bg: #f5f5f5; /* Light grey for panels/sidebar */
+  --text-main: #111111;
+  --text-muted: #444444;
+  --border-color: #bbbbbb;
+  --input-bg: #ffffff; /* White for text fields in light mode for contrast */
+  --accent-color: #0056b3;
+  --accent-hover: #004494;
+  --btn-text: #ffffff;
+  --btn-secondary-text: #333333;
+}
+
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+button {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+}
+
+button:hover {
+  filter: brightness(1.2);
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+/* Scrollbar styling for dark mode */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-color);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}

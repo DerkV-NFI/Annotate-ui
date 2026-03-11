@@ -1,0 +1,695 @@
+import { useState, useEffect, useRef } from 'react';
+import html2canvas from 'html2canvas';
+import './index.css';
+import { ImagePanel } from './components/ImagePanel';
+import { SvgOverlay } from './components/SvgOverlay';
+import { AppStateProvider, useAppState } from './state/AppStateContext';
+import type { Annotation } from './state/AppStateContext';
+
+function AnnotationListItem({
+  ann,
+  onDelete,
+  onChangeText,
+  onChangeColor,
+  onMoveUp,
+  onMoveDown,
+  isFirst,
+  isLast,
+  isNew
+}: {
+  ann: Annotation;
+  onDelete: () => void;
+  onChangeText: (text: string) => void;
+  onChangeColor: (color: string) => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  isFirst: boolean;
+  isLast: boolean;
+  isNew: boolean;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (isNew && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [isNew]);
+
+  const presetColors = [
+    { name: 'Default', value: 'var(--accent-color)' },
+    { name: 'Red', value: '#ff4444' },
+    { name: 'Green', value: '#00c851' }
+  ];
+
+  return (
+    <div style={{
+      backgroundColor: 'var(--bg-color)',
+      border: '1px solid var(--border-color)',
+      borderRadius: '6px',
+      padding: '12px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{
+            width: '24px',
+            height: '24px',
+            borderRadius: '50%',
+            backgroundColor: ann.color.startsWith('var') ? 'var(--accent-color)' : ann.color,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '0.8rem',
+            fontWeight: 'bold',
+            color: 'white',
+            textShadow: '0 0 2px rgba(0,0,0,0.5)'
+          }}>
+            {ann.label}
+          </span>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+            {ann.type} marker
+          </span>
+          {ann.radius && (
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              rx: {ann.radius}
+            </span>
+          )}
+          {ann.ry && ann.ry !== ann.radius && (
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              ry: {ann.ry}
+            </span>
+          )}
+          {ann.rotation !== undefined && ann.rotation !== 0 && (
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              rot: {ann.rotation}°
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <button
+            disabled={isFirst}
+            onClick={onMoveUp}
+            style={{ ...smallIconButtonStyle, opacity: isFirst ? 0.3 : 1 }}
+            title="Move Up"
+          >
+            ↑
+          </button>
+          <button
+            disabled={isLast}
+            onClick={onMoveDown}
+            style={{ ...smallIconButtonStyle, opacity: isLast ? 0.3 : 1 }}
+            title="Move Down"
+          >
+            ↓
+          </button>
+          <button
+            onClick={onDelete}
+            style={{ ...smallIconButtonStyle, color: 'var(--danger-color)' }}
+            title="Delete"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+        {presetColors.map(c => (
+          <button
+            key={c.value}
+            onClick={() => onChangeColor(c.value)}
+            style={{
+              width: '16px',
+              height: '16px',
+              borderRadius: '50%',
+              backgroundColor: c.value.startsWith('var') ? 'var(--accent-color)' : c.value,
+              border: ann.color === c.value ? '2px solid white' : '1px solid rgba(255,255,255,0.2)',
+              cursor: 'pointer',
+              padding: 0
+            }}
+            title={c.name}
+          />
+        ))}
+        <div style={{ position: 'relative', width: '16px', height: '16px' }}>
+          <input
+            type="color"
+            value={ann.color.startsWith('var') ? '#007acc' : ann.color}
+            onChange={(e) => onChangeColor(e.target.value)}
+            style={{
+              opacity: 0,
+              position: 'absolute',
+              width: '100%',
+              height: '100%',
+              cursor: 'pointer'
+            }}
+            title="Custom Color"
+          />
+          <div style={{
+            width: '16px',
+            height: '16px',
+            borderRadius: '50%',
+            background: 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)',
+            border: (!presetColors.some(c => c.value === ann.color)) ? '2px solid white' : '1px solid rgba(255,255,255,0.2)',
+            pointerEvents: 'none'
+          }} />
+        </div>
+      </div>
+
+      <textarea
+        ref={textareaRef}
+        value={ann.text}
+        onChange={(e) => onChangeText(e.target.value)}
+        placeholder="Enter description..."
+        style={{
+          backgroundColor: 'var(--input-bg, var(--bg-color))',
+          color: 'var(--text-main)',
+          border: '1px solid var(--border-color)',
+          borderRadius: '4px',
+          padding: '8px',
+          fontSize: '0.85rem',
+          resize: 'vertical',
+          minHeight: '60px',
+          fontFamily: 'inherit'
+        }}
+      />
+    </div>
+  );
+}
+
+function ResizePopover({
+  ann,
+  onUpdate,
+  onClose
+}: {
+  ann: Annotation,
+  onUpdate: (updates: Partial<Annotation>) => void,
+  onClose: () => void
+}) {
+  const isLocked = ann.isLocked !== false;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      backgroundColor: 'var(--panel-bg)',
+      border: '1px solid var(--accent-color)',
+      borderRadius: '8px',
+      padding: '20px',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+      zIndex: 1000,
+      width: '240px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '12px',
+      maxHeight: '80vh',
+      overflowY: 'auto'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <h3 style={{ fontSize: '0.9rem', margin: 0 }}>Marker Shape: {ann.label}</h3>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>✕</button>
+      </div>
+
+      <button
+        onClick={() => onUpdate({ isLocked: !isLocked })}
+        style={{
+          ...buttonStyle,
+          backgroundColor: isLocked ? 'var(--accent-color)' : 'transparent',
+          color: isLocked ? 'white' : 'var(--accent-color)',
+          fontSize: '0.75rem',
+          padding: '4px 8px'
+        }}
+      >
+        {isLocked ? '🔒 Coordinates Linked' : '🔓 Coordinates Unlinked'}
+      </button>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <h4 style={{ fontSize: '0.8rem', margin: '4px 0', color: 'var(--text-muted)' }}>
+          {isLocked ? 'Global Parameters' : 'Panel 1 Parameters'}
+        </h4>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Width (rx)</label>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <input
+              type="range" min="5" max="200" step="1"
+              value={ann.radius || 30}
+              onChange={(e) => onUpdate({ radius: parseInt(e.target.value) })}
+              style={{ flex: 1 }}
+            />
+            <span style={{ fontSize: '0.75rem', width: '25px' }}>{ann.radius || 30}</span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Height (ry)</label>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <input
+              type="range" min="5" max="200" step="1"
+              value={ann.ry || ann.radius || 30}
+              onChange={(e) => onUpdate({ ry: parseInt(e.target.value) })}
+              style={{ flex: 1 }}
+            />
+            <span style={{ fontSize: '0.75rem', width: '25px' }}>{ann.ry || ann.radius || 30}</span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Rotation (°)</label>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <input
+              type="range" min="0" max="359" step="1"
+              value={ann.rotation || 0}
+              onChange={(e) => onUpdate({ rotation: parseInt(e.target.value) })}
+              style={{ flex: 1 }}
+            />
+            <span style={{ fontSize: '0.75rem', width: '25px' }}>{ann.rotation || 0}</span>
+          </div>
+        </div>
+      </div>
+
+      {!isLocked && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+          <h4 style={{ fontSize: '0.8rem', margin: '4px 0', color: 'var(--text-muted)' }}>Panel 2 Parameters</h4>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Width (rx)</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input
+                type="range" min="5" max="200" step="1"
+                value={ann.radius2 || ann.radius || 30}
+                onChange={(e) => onUpdate({ radius2: parseInt(e.target.value) })}
+                style={{ flex: 1 }}
+              />
+              <span style={{ fontSize: '0.75rem', width: '25px' }}>{ann.radius2 || ann.radius || 30}</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Height (ry)</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input
+                type="range" min="5" max="200" step="1"
+                value={ann.ry2 || ann.ry || ann.radius || 30}
+                onChange={(e) => onUpdate({ ry2: parseInt(e.target.value) })}
+                style={{ flex: 1 }}
+              />
+              <span style={{ fontSize: '0.75rem', width: '25px' }}>{ann.ry2 || ann.ry || ann.radius || 30}</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Rotation (°)</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input
+                type="range" min="0" max="359" step="1"
+                value={ann.rotation2 || ann.rotation || 0}
+                onChange={(e) => onUpdate({ rotation2: parseInt(e.target.value) })}
+                style={{ flex: 1 }}
+              />
+              <span style={{ fontSize: '0.75rem', width: '25px' }}>{ann.rotation2 || ann.rotation || 0}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <button
+        onClick={onClose}
+        style={{
+          ...buttonStyle,
+          marginTop: '8px',
+          width: '100%'
+        }}
+      >
+        Done
+      </button>
+    </div>
+  );
+}
+const smallIconButtonStyle: React.CSSProperties = {
+  background: 'none',
+  borderRadius: '4px',
+  color: 'var(--text-muted)',
+  cursor: 'pointer',
+  padding: '2px 6px',
+  fontSize: '0.75rem'
+};
+
+function AppContent() {
+  const [layoutMode, setLayoutMode] = useState<'side-by-side' | 'top-bottom'>('side-by-side');
+  const [isExporting, setIsExporting] = useState(false);
+  const { 
+    toolMode, 
+    setToolMode, 
+    activeMarkerType, 
+    setActiveMarkerType, 
+    annotations, 
+    setAnnotations,
+    editingAnnotationId,
+    setEditingAnnotationId,
+    setWorkspaceRect,
+    setLastUsedColor,
+    theme,
+    setTheme
+  } = useAppState();
+  const mainRef = useRef<HTMLElement>(null);
+  const prevAnnotationsCount = useRef(annotations.length);
+
+  // Sync theme to body attribute
+  useEffect(() => {
+    document.body.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  // Sync workspace rect for coordinate calibration
+  useEffect(() => {
+    const updateRect = () => {
+      if (mainRef.current) {
+        setWorkspaceRect(mainRef.current.getBoundingClientRect());
+      }
+    };
+    updateRect();
+    window.addEventListener('resize', updateRect);
+    return () => window.removeEventListener('resize', updateRect);
+  }, [setWorkspaceRect]);
+
+  const editingAnn = annotations.find(a => a.id === editingAnnotationId);
+
+  const moveAnnotation = (index: number, direction: 'up' | 'down') => {
+    setAnnotations(prev => {
+      const next = [...prev];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= next.length) return prev;
+
+      const temp = next[index];
+      next[index] = next[targetIndex];
+      next[targetIndex] = temp;
+
+      // Update labels after swap
+      return next.map((ann, i) => ({ ...ann, label: (i + 1).toString() }));
+    });
+  };
+
+  const exportCSV = () => {
+    const headers = ['Label', 'Type', 'Description', 'Image 1 X', 'Image 1 Y', 'Image 2 X', 'Image 2 Y'];
+    const rows = annotations.map(ann => [
+      ann.label,
+      ann.type,
+      ann.text.replace(/"/g, '""'),
+      ann.points[0]?.imageCoord.x.toFixed(2) || '',
+      ann.points[0]?.imageCoord.y.toFixed(2) || '',
+      ann.points[1]?.imageCoord.x.toFixed(2) || '',
+      ann.points[1]?.imageCoord.y.toFixed(2) || '',
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'forensic_annotations.csv');
+    link.click();
+  };
+
+  const exportVisual = async () => {
+    if (!mainRef.current) return;
+    setIsExporting(true);
+    try {
+      // html2canvas sometimes needs a small delay to ensure all CSS transforms are settled
+      const canvas = await html2canvas(mainRef.current, {
+        useCORS: true, // Allow loading remote images if applicable
+        backgroundColor: null, // Transparent background as requested
+        scale: 2, // Higher quality scale
+        logging: false,
+      });
+
+      const url = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `forensic_export_${new Date().getTime()}.png`;
+      link.click();
+    } catch (err) {
+      console.error('Export failed:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
+      {/* Header / Tabs Area */}
+      <header style={{
+        height: '50px',
+        backgroundColor: 'var(--panel-bg)',
+        borderBottom: '1px solid var(--border-color)',
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 16px',
+        justifyContent: 'space-between',
+        zIndex: 50 // Above SVG overlay
+      }}>
+        <h1 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Forensic Annotator</h1>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            style={{ ...buttonStyle, backgroundColor: 'transparent', padding: '4px 8px', fontSize: '1.1rem' }}
+            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+          <button
+            style={buttonStyle}
+            onClick={() => setLayoutMode(prev => prev === 'side-by-side' ? 'top-bottom' : 'side-by-side')}
+          >
+            Toggle Layout
+          </button>
+        </div>
+      </header>
+
+      {/* Main Workspace Area */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+        {/* Sidebar */}
+        <aside style={{
+          width: '300px',
+          backgroundColor: 'var(--panel-bg)',
+          borderRight: '1px solid var(--border-color)',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '16px',
+          overflow: 'hidden'
+        }}>
+          <h2 style={{ fontSize: '1rem', marginBottom: '16px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Annotations</span>
+              <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>{annotations.length} total</span>
+            </div>
+            {annotations.length > 0 && (
+              <button
+                onClick={() => {
+                  if (confirm('Clear all annotations? This cannot be undone.')) {
+                    setAnnotations([]);
+                  }
+                }}
+                style={{
+                  alignSelf: 'flex-start',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--danger-color)',
+                  cursor: 'pointer',
+                  fontSize: '0.75rem',
+                  padding: 0,
+                  opacity: 0.7
+                }}
+              >
+                Clear All
+              </button>
+            )}
+          </h2>
+
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            <button
+              onClick={() => {
+                setToolMode('annotate');
+                setActiveMarkerType('point');
+              }}
+              style={{
+                ...buttonStyle,
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                backgroundColor: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--accent-hover)' : 'var(--panel-bg)',
+                border: (toolMode === 'annotate' && activeMarkerType === 'point') ? '1px solid var(--accent-color)' : '1px solid var(--border-color)'
+              }}
+              title="Add Point Annotation"
+            >
+            <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--btn-text)' : 'var(--text-main)' }}>+</span>
+              <span style={{ fontSize: '1rem', color: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--btn-text)' : 'var(--text-main)' }}>↗</span>
+            </button>
+            <button
+              onClick={() => {
+                setToolMode('annotate');
+                setActiveMarkerType('area');
+              }}
+              style={{
+                ...buttonStyle,
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                backgroundColor: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--accent-hover)' : 'var(--panel-bg)',
+                border: (toolMode === 'annotate' && activeMarkerType === 'area') ? '1px solid var(--accent-color)' : '1px solid var(--border-color)'
+              }}
+              title="Add Area Annotation"
+            >
+            <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--btn-text)' : 'var(--text-main)' }}>+</span>
+              <span style={{ fontSize: '1rem', color: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--btn-text)' : 'var(--text-main)' }}>○</span>
+            </button>
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {annotations.length === 0 ? (
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>
+                No annotations yet. <br />Use the "Add Annotation" tool above.
+              </p>
+            ) : (
+              annotations.map((ann, index) => (
+                <AnnotationListItem
+                  key={ann.id}
+                  ann={ann}
+                  isFirst={index === 0}
+                  isLast={index === annotations.length - 1}
+                  isNew={index === annotations.length - 1 && annotations.length > prevAnnotationsCount.current}
+                  onDelete={() => {
+                    setAnnotations(prev => prev.filter(a => a.id !== ann.id).map((a, i) => ({ ...a, label: (i + 1).toString() })));
+                  }}
+                  onChangeText={(text) => {
+                    setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, text } : a));
+                  }}
+                  onChangeColor={(color) => {
+                    setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, color } : a));
+                    setLastUsedColor(color);
+                  }}
+                  onMoveUp={() => moveAnnotation(index, 'up')}
+                  onMoveDown={() => moveAnnotation(index, 'down')}
+                />
+              ))
+            )}
+            {/* Capture the count for next render */}
+            {(() => { prevAnnotationsCount.current = annotations.length; return null; })()}
+          </div>
+
+          {annotations.length > 0 && (
+            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                disabled={isExporting}
+                onClick={exportVisual}
+                style={{ ...buttonStyle, width: '100%' }}
+              >
+                {isExporting ? 'Exporting...' : 'Export High-Qual Image'}
+              </button>
+              <button
+                onClick={exportCSV}
+                style={{ ...buttonStyle, width: '100%', backgroundColor: 'transparent', color: 'var(--accent-color)' }}
+              >
+                Export CSV Data
+              </button>
+              <button
+                onClick={() => {
+                  const blob = new Blob([JSON.stringify(annotations, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'annotations.json';
+                  a.click();
+                }}
+                style={{ ...buttonStyle, border: 'none', width: '100%', backgroundColor: 'transparent', fontSize: '0.75rem', color: 'var(--text-muted)' }}
+              >
+                Export JSON (Debug)
+              </button>
+            </div>
+          )}
+        </aside>
+
+        {/* Dual Panel Layout */}
+        <main
+          ref={mainRef}
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: layoutMode === 'side-by-side' ? 'row' : 'column',
+            position: 'relative',
+            backgroundColor: 'var(--bg-color)' // Themed background
+          }}
+        >
+          {/* Panel 1 */}
+          <ImagePanel panelId="1" />
+
+          {/* Divider */}
+          <div style={dividerStyle(layoutMode)}></div>
+
+          {/* Panel 2 */}
+          <ImagePanel panelId="2" />
+
+          {/* SVG Overlay */}
+          <svg style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none', // Restored to none so panels can receive drag/drop
+            zIndex: 40 // Below header (50), above panels
+          }}>
+            <SvgOverlay />
+          </svg>
+
+          {editingAnn && (
+            <ResizePopover 
+              ann={editingAnn}
+              onUpdate={(updates) => {
+                setAnnotations(prev => prev.map(a => a.id === editingAnn.id ? { ...a, ...updates } : a));
+              }}
+              onClose={() => setEditingAnnotationId(null)}
+            />
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <AppStateProvider>
+      <AppContent />
+    </AppStateProvider>
+  );
+}
+
+const buttonStyle: React.CSSProperties = {
+  backgroundColor: 'var(--accent-color)',
+  color: 'var(--btn-text)',
+  border: '1px solid var(--border-color)',
+  padding: '6px 12px',
+  borderRadius: '4px',
+  cursor: 'pointer',
+  fontSize: '0.85rem',
+  transition: 'all 0.2s'
+};
+
+const dividerStyle = (mode: 'side-by-side' | 'top-bottom'): React.CSSProperties => ({
+  backgroundColor: 'var(--border-color)',
+  ...(mode === 'side-by-side' ? { width: '2px', height: '100%', cursor: 'col-resize' } : { height: '2px', width: '100%', cursor: 'row-resize' })
+});
+
+export default App;
