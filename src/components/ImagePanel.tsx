@@ -88,9 +88,6 @@ export function ImagePanel({ panelId }: ImagePanelProps) {
         reader.onload = (event) => {
           if (event.target?.result) {
             setImageSrc(panelId, event.target.result as string);
-            // Reset view
-            setScale(1);
-            setOffset({ x: 0, y: 0 });
           }
         };
         reader.readAsDataURL(file);
@@ -106,15 +103,37 @@ export function ImagePanel({ panelId }: ImagePanelProps) {
         reader.onload = (event) => {
           if (event.target?.result) {
             setImageSrc(panelId, event.target.result as string);
-            // Reset view
-            setScale(1);
-            setOffset({ x: 0, y: 0 });
           }
         };
         reader.readAsDataURL(file);
       }
     }
   };
+
+  // Automatically adjust zoom when image changes
+  useEffect(() => {
+    if (!imageSrc || !containerRef.current) return;
+
+    const img = new Image();
+    img.onload = () => {
+      const containerRect = containerRef.current!.getBoundingClientRect();
+      const naturalWidth = img.naturalWidth;
+      const naturalHeight = img.naturalHeight;
+
+      // If image is larger than container in either dimension, fit it.
+      // Otherwise, set to 100%.
+      if (naturalWidth > containerRect.width || naturalHeight > containerRect.height) {
+        const scaleX = containerRect.width / naturalWidth;
+        const scaleY = containerRect.height / naturalHeight;
+        const fitScale = Math.min(scaleX, scaleY) * 0.95;
+        setScale(Math.max(0.01, fitScale));
+      } else {
+        setScale(1);
+      }
+      setOffset({ x: 0, y: 0 });
+    };
+    img.src = imageSrc;
+  }, [imageSrc, panelId]);
 
   const handleZoomReset = () => {
     setScale(1);
@@ -278,6 +297,8 @@ export function ImagePanel({ panelId }: ImagePanelProps) {
         position: 'relative',
         overflow: 'hidden',
         backgroundColor: 'var(--bg-color)',
+        minWidth: 0,
+        minHeight: 0,
         cursor: toolMode === 'annotate' && imageSrc 
           ? 'crosshair' 
           : isPanning ? 'grabbing' : (imageSrc ? 'grab' : 'default')

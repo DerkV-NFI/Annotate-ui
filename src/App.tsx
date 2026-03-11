@@ -771,6 +771,7 @@ function AppContent() {
         {/* Sidebar */}
         <aside style={{
           width: '300px',
+          flexShrink: 0,
           backgroundColor: 'var(--panel-bg)',
           borderRight: '1px solid var(--border-color)',
           display: 'flex',
@@ -1055,11 +1056,13 @@ function AppContent() {
             display: 'flex',
             flexDirection: layoutMode === 'side-by-side' ? 'row' : 'column',
             position: 'relative',
-            backgroundColor: 'var(--bg-color)' // Themed background
+            backgroundColor: 'var(--bg-color)', // Themed background
+            minWidth: 0,
+            minHeight: 0
           }}
         >
           {/* Panel 1 */}
-          <div data-transparent-on-export="true" style={{ flex: 1, display: 'flex' }}>
+          <div data-transparent-on-export="true" style={{ flex: '1 1 0%', display: 'flex', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
             <ImagePanel panelId="1" />
           </div>
 
@@ -1067,7 +1070,7 @@ function AppContent() {
           <div data-html2canvas-ignore="true" style={dividerStyle(layoutMode)}></div>
 
           {/* Panel 2 */}
-          <div data-transparent-on-export="true" style={{ flex: 1, display: 'flex' }}>
+          <div data-transparent-on-export="true" style={{ flex: '1 1 0%', display: 'flex', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
             <ImagePanel panelId="2" />
           </div>
 
