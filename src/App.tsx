@@ -338,6 +338,75 @@ const smallIconButtonStyle: React.CSSProperties = {
   fontSize: '0.75rem'
 };
 
+// Helper for the "Black, White, Custom" color selection in settings
+function SettingsColorSelection({ 
+  value, 
+  onChange, 
+  label 
+}: { 
+  value: string; 
+  onChange: (c: string) => void; 
+  label: string;
+}) {
+  const presetColors = [
+    { name: 'White', value: '#ffffff' },
+    { name: 'Black', value: '#000000' }
+  ];
+  const isCustom = !presetColors.some(c => c.value === value);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>{label}</label>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        {presetColors.map(c => (
+          <button
+            key={c.value}
+            onClick={() => onChange(c.value)}
+            style={{
+              width: '18px',
+              height: '18px',
+              borderRadius: '50%',
+              backgroundColor: c.value,
+              border: value === c.value ? '2px solid white' : '1px solid rgba(255,255,255,0.2)',
+              boxShadow: value === c.value ? '0 0 0 1px var(--accent-color)' : 'none',
+              cursor: 'pointer',
+              padding: 0
+            }}
+            title={c.name}
+          />
+        ))}
+        
+        {/* Rainbow Custom Picker Dot */}
+        <div style={{ position: 'relative', width: '18px', height: '18px' }}>
+          <input
+            type="color"
+            value={isCustom ? value : '#007acc'}
+            onChange={(e) => onChange(e.target.value)}
+            style={{
+              opacity: 0,
+              position: 'absolute',
+              width: '100%',
+              height: '100%',
+              cursor: 'pointer',
+              zIndex: 1
+            }}
+            title="Custom Color"
+          />
+          <div style={{
+            width: '18px',
+            height: '18px',
+            borderRadius: '50%',
+            background: 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)',
+            border: isCustom ? '2px solid white' : '1px solid rgba(255,255,255,0.2)',
+            boxShadow: isCustom ? '0 0 0 1px var(--accent-color)' : 'none',
+            pointerEvents: 'none'
+          }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AppContent() {
   const [layoutMode, setLayoutMode] = useState<'side-by-side' | 'top-bottom'>('side-by-side');
   const [isExporting, setIsExporting] = useState(false);
@@ -360,6 +429,8 @@ function AppContent() {
     setLabelFontSize,
     showLabelBackground,
     setShowLabelBackground,
+    labelBgColor,
+    setLabelBgColor,
     lineThickness,
     setLineThickness,
     labelPosition,
@@ -630,15 +701,34 @@ function AppContent() {
                   </div>
                 </div>
 
-                {/* Background Toggle */}
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', cursor: 'pointer', userSelect: 'none' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={showLabelBackground} 
-                    onChange={(e) => setShowLabelBackground(e.target.checked)} 
-                  />
-                  Label Background
-                </label>
+                {/* Background Settings */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', cursor: 'pointer', userSelect: 'none' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={showLabelBackground} 
+                      onChange={(e) => setShowLabelBackground(e.target.checked)} 
+                    />
+                    Label Background
+                  </label>
+                  
+                  {showLabelBackground && (
+                    <SettingsColorSelection 
+                      label="BACKGROUND COLOR" 
+                      value={labelBgColor} 
+                      onChange={setLabelBgColor} 
+                    />
+                  )}
+                </div>
+
+                {/* Text Color Selection */}
+                <SettingsColorSelection 
+                  label="TEXT COLOR" 
+                  value={labelColor} 
+                  onChange={setLabelColor} 
+                />
+
+                <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
 
                 {/* Font Size */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -687,29 +777,6 @@ function AppContent() {
                       >
                         {pos === 'image1' ? 'Img 1' : pos === 'image2' ? 'Img 2' : 'Center'}
                       </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Label Color */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>LABEL TEXT COLOR</label>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    {['#ffffff', '#000000', '#ffeb3b', '#4caf50', '#2196f3', '#f44336', 'var(--text-main)'].map(c => (
-                      <button
-                        key={c}
-                        onClick={() => setLabelColor(c)}
-                        style={{
-                          width: '18px',
-                          height: '18px',
-                          borderRadius: '50%',
-                          backgroundColor: c.startsWith('var') ? 'var(--text-main)' : c,
-                          border: labelColor === c ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
-                          padding: 0,
-                          cursor: 'pointer'
-                        }}
-                        title={c === 'var(--text-main)' ? 'Default Text Color' : c}
-                      />
                     ))}
                   </div>
                 </div>

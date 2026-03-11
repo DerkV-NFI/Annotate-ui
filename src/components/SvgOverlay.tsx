@@ -19,7 +19,8 @@ export function SvgOverlay() {
     showLabelBackground,
     lineThickness,
     labelPosition,
-    labelColor
+    labelColor,
+    labelBgColor
   } = useAppState();
   const [mousePos, setMousePos] = React.useState<Point | null>(null);
 
@@ -202,7 +203,7 @@ export function SvgOverlay() {
       <g style={{ pointerEvents: 'auto' }}>
         <line x1={pos.x} y1={pos.y} x2={pos.x + offset} y2={pos.y - offset} stroke={color} strokeWidth={Math.max(1, lineThickness/2)} strokeDasharray="2 2" />
         {showLabelBackground && (
-          <circle cx={pos.x + offset} cy={pos.y - offset} r={radius} fill="var(--panel-bg)" stroke={color} strokeWidth="2" />
+          <circle cx={pos.x + offset} cy={pos.y - offset} r={radius} fill={labelBgColor.startsWith('var') ? 'var(--panel-bg)' : labelBgColor} stroke={color} strokeWidth="2" />
         )}
         <text 
           x={pos.x + offset} 
