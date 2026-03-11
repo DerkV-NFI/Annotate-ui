@@ -746,10 +746,21 @@ function AppContent() {
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
           <button
-            style={buttonStyle}
+            style={{ ...buttonStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '32px', padding: 0 }}
             onClick={() => setLayoutMode(prev => prev === 'side-by-side' ? 'top-bottom' : 'side-by-side')}
+            title={`Switch to ${layoutMode === 'side-by-side' ? 'Top/Bottom' : 'Side-by-Side'} layout`}
           >
-            Toggle Layout
+            {layoutMode === 'side-by-side' ? (
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="4" width="7" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                <rect x="11" y="4" width="7" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="2" width="12" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                <rect x="4" y="11" width="12" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+            )}
           </button>
         </div>
       </header>
