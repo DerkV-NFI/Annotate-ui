@@ -147,6 +147,17 @@ export function SvgOverlay() {
         y: mousePos.y - workspaceRect.top
       };
 
+      const mousePanelId = (() => {
+        for (const [id, rect] of Object.entries(panelRects)) {
+          if (!rect) continue;
+          if (mousePos.x >= rect.left && mousePos.x <= rect.right && 
+              mousePos.y >= rect.top && mousePos.y <= rect.bottom) {
+            return id;
+          }
+        }
+        return null;
+      })();
+
       if (activeAnnotation.type === 'area') {
         const panelId = activeAnnotation.points[0].panelId;
         const isP1_2 = panelId === '2';
@@ -174,13 +185,17 @@ export function SvgOverlay() {
         <g>
           {renderArrow(p1, calibratedMouse, 'rgba(255, 152, 0, 0.5)')}
           {(() => {
-            let labelPos = p1;
+            const p1PanelId = activeAnnotation.points[0].panelId;
+            let labelPos = p1; // Default/Fallback
+            
             if (labelPosition === 'center') {
               labelPos = { x: (p1.x + calibratedMouse.x) / 2, y: (p1.y + calibratedMouse.y) / 2 };
+            } else if (labelPosition === 'image1') {
+              labelPos = (p1PanelId === '1') ? p1 : (mousePanelId === '1' ? calibratedMouse : p1);
             } else if (labelPosition === 'image2') {
-              labelPos = calibratedMouse;
+              labelPos = (p1PanelId === '2') ? p1 : (mousePanelId === '2' ? calibratedMouse : p1);
             }
-            return renderLabel(labelPos, activeAnnotation.id === 'draft' ? '?' : '?', 'rgba(255, 152, 0, 0.5)');
+            return renderLabel(labelPos, '?', 'rgba(255, 152, 0, 0.5)');
           })()}
           <circle cx={p1.x} cy={p1.y} r="4" fill="none" stroke="#ff9800" strokeWidth="1" />
         </g>
@@ -309,13 +324,24 @@ export function SvgOverlay() {
           )}
 
           {(() => {
-            if (!p1Visible) return null;
-            let labelPos = p1;
-            if (labelPosition === 'center' && p2 && p2Visible) {
+            const pt1 = ann.points[0];
+            const pt2 = ann.points.length > 1 ? ann.points[1] : null;
+            
+            let labelPos: Point = p1; // Default
+            
+            if (labelPosition === 'center' && p2 && p2Visible && p1Visible) {
               labelPos = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-            } else if (labelPosition === 'image2' && p2 && p2Visible) {
-              labelPos = p2;
+            } else if (labelPosition === 'image1') {
+              if (pt1.panelId === '1' && p1Visible) labelPos = p1;
+              else if (pt2 && pt2.panelId === '1' && p2Visible) labelPos = p2!;
+            } else if (labelPosition === 'image2') {
+              if (pt1.panelId === '2' && p1Visible) labelPos = p1;
+              else if (pt2 && pt2.panelId === '2' && p2Visible) labelPos = p2!;
+            } else {
+              // Fallback to first visible point
+              labelPos = p1Visible ? p1 : (p2Visible && p2 ? p2 : p1);
             }
+            
             return renderLabel(labelPos, displayLabel, ann.color);
           })()}
         </g>
