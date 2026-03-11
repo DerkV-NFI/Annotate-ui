@@ -8,6 +8,7 @@ import type { Annotation } from './state/AppStateContext';
 
 function AnnotationListItem({
   ann,
+  displayLabel,
   onDelete,
   onChangeText,
   onChangeColor,
@@ -18,6 +19,7 @@ function AnnotationListItem({
   isNew
 }: {
   ann: Annotation;
+  displayLabel: string;
   onDelete: () => void;
   onChangeText: (text: string) => void;
   onChangeColor: (color: string) => void;
@@ -66,26 +68,11 @@ function AnnotationListItem({
             color: 'white',
             textShadow: '0 0 2px rgba(0,0,0,0.5)'
           }}>
-            {ann.label}
+            {displayLabel}
           </span>
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
             {ann.type} marker
           </span>
-          {ann.radius && (
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              rx: {ann.radius}
-            </span>
-          )}
-          {ann.ry && ann.ry !== ann.radius && (
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              ry: {ann.ry}
-            </span>
-          )}
-          {ann.rotation !== undefined && ann.rotation !== 0 && (
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              rot: {ann.rotation}°
-            </span>
-          )}
         </div>
 
         <div style={{ display: 'flex', gap: '4px' }}>
@@ -230,7 +217,7 @@ function ResizePopover({
         <h4 style={{ fontSize: '0.8rem', margin: '4px 0', color: 'var(--text-muted)' }}>
           {isLocked ? 'Global Parameters' : 'Panel 1 Parameters'}
         </h4>
-        
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Width (rx)</label>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -274,7 +261,7 @@ function ResizePopover({
       {!isLocked && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
           <h4 style={{ fontSize: '0.8rem', margin: '4px 0', color: 'var(--text-muted)' }}>Panel 2 Parameters</h4>
-          
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Width (rx)</label>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -339,13 +326,13 @@ const smallIconButtonStyle: React.CSSProperties = {
 };
 
 // Helper for the "Black, White, Custom" color selection in settings
-function SettingsColorSelection({ 
-  value, 
-  onChange, 
-  label 
-}: { 
-  value: string; 
-  onChange: (c: string) => void; 
+function SettingsColorSelection({
+  value,
+  onChange,
+  label
+}: {
+  value: string;
+  onChange: (c: string) => void;
   label: string;
 }) {
   const presetColors = [
@@ -375,7 +362,7 @@ function SettingsColorSelection({
             title={c.name}
           />
         ))}
-        
+
         {/* Rainbow Custom Picker Dot */}
         <div style={{ position: 'relative', width: '18px', height: '18px' }}>
           <input
@@ -410,12 +397,12 @@ function SettingsColorSelection({
 function AppContent() {
   const [layoutMode, setLayoutMode] = useState<'side-by-side' | 'top-bottom'>('side-by-side');
   const [isExporting, setIsExporting] = useState(false);
-  const { 
-    toolMode, 
-    setToolMode, 
-    activeMarkerType, 
-    setActiveMarkerType, 
-    annotations, 
+  const {
+    toolMode,
+    setToolMode,
+    activeMarkerType,
+    setActiveMarkerType,
+    annotations,
     setAnnotations,
     editingAnnotationId,
     setEditingAnnotationId,
@@ -441,6 +428,25 @@ function AppContent() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const prevAnnotationsCount = useRef(annotations.length);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in a textarea or input
+      if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) {
+        return;
+      }
+      if (e.key === '1') {
+        setToolMode('annotate');
+        setActiveMarkerType('point');
+      } else if (e.key === '2') {
+        setToolMode('annotate');
+        setActiveMarkerType('area');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setToolMode, setActiveMarkerType]);
 
   // Sync theme to body attribute
   useEffect(() => {
@@ -615,7 +621,7 @@ function AppContent() {
                 backgroundColor: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--accent-hover)' : 'var(--panel-bg)',
                 border: (toolMode === 'annotate' && activeMarkerType === 'point') ? '1px solid var(--accent-color)' : '1px solid var(--border-color)'
               }}
-              title="Add Point Annotation"
+              title="Add Point Annotation (1)"
             >
               <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--btn-text)' : 'var(--text-main)' }}>+</span>
               <span style={{ fontSize: '1rem', color: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--btn-text)' : 'var(--text-main)' }}>↗</span>
@@ -635,7 +641,7 @@ function AppContent() {
                 backgroundColor: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--accent-hover)' : 'var(--panel-bg)',
                 border: (toolMode === 'annotate' && activeMarkerType === 'area') ? '1px solid var(--accent-color)' : '1px solid var(--border-color)'
               }}
-              title="Add Area Annotation"
+              title="Add Area Annotation (2)"
             >
               <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--btn-text)' : 'var(--text-main)' }}>+</span>
               <span style={{ fontSize: '1rem', color: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--btn-text)' : 'var(--text-main)' }}>○</span>
@@ -644,7 +650,7 @@ function AppContent() {
 
           {/* Annotation Settings Collapsible */}
           <div style={{ marginBottom: '16px', border: '1px solid var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
-            <button 
+            <button
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
               style={{
                 width: '100%',
@@ -663,19 +669,19 @@ function AppContent() {
               Annotation Settings
               <span>{isSettingsOpen ? '▼' : '▶'}</span>
             </button>
-            
+
             {isSettingsOpen && (
               <div style={{ padding: '12px', backgroundColor: 'var(--panel-bg)', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border-color)' }}>
                 {/* Numbering Type */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>NUMBERING FORMAT</label>
                   <div style={{ display: 'flex', gap: '4px' }}>
-                    <button 
+                    <button
                       onClick={() => setLabelType('numeric')}
-                      style={{ 
-                        ...buttonStyle, 
-                        flex: 1, 
-                        fontSize: '0.7rem', 
+                      style={{
+                        ...buttonStyle,
+                        flex: 1,
+                        fontSize: '0.7rem',
                         padding: '4px',
                         backgroundColor: labelType === 'numeric' ? 'var(--accent-color)' : 'transparent',
                         color: labelType === 'numeric' ? 'var(--btn-text)' : 'var(--text-main)',
@@ -684,12 +690,12 @@ function AppContent() {
                     >
                       1, 2, 3
                     </button>
-                    <button 
+                    <button
                       onClick={() => setLabelType('alphabetic')}
-                      style={{ 
-                        ...buttonStyle, 
-                        flex: 1, 
-                        fontSize: '0.7rem', 
+                      style={{
+                        ...buttonStyle,
+                        flex: 1,
+                        fontSize: '0.7rem',
                         padding: '4px',
                         backgroundColor: labelType === 'alphabetic' ? 'var(--accent-color)' : 'transparent',
                         color: labelType === 'alphabetic' ? 'var(--btn-text)' : 'var(--text-main)',
@@ -704,28 +710,28 @@ function AppContent() {
                 {/* Background Settings */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', cursor: 'pointer', userSelect: 'none' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={showLabelBackground} 
-                      onChange={(e) => setShowLabelBackground(e.target.checked)} 
+                    <input
+                      type="checkbox"
+                      checked={showLabelBackground}
+                      onChange={(e) => setShowLabelBackground(e.target.checked)}
                     />
                     Label Background
                   </label>
-                  
+
                   {showLabelBackground && (
-                    <SettingsColorSelection 
-                      label="BACKGROUND COLOR" 
-                      value={labelBgColor} 
-                      onChange={setLabelBgColor} 
+                    <SettingsColorSelection
+                      label="BACKGROUND COLOR"
+                      value={labelBgColor}
+                      onChange={setLabelBgColor}
                     />
                   )}
                 </div>
 
                 {/* Text Color Selection */}
-                <SettingsColorSelection 
-                  label="TEXT COLOR" 
-                  value={labelColor} 
-                  onChange={setLabelColor} 
+                <SettingsColorSelection
+                  label="TEXT COLOR"
+                  value={labelColor}
+                  onChange={setLabelColor}
                 />
 
                 <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
@@ -736,8 +742,8 @@ function AppContent() {
                     <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>LABEL SIZE</label>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-main)' }}>{labelFontSize}px</span>
                   </div>
-                  <input 
-                    type="range" min="8" max="24" value={labelFontSize} 
+                  <input
+                    type="range" min="8" max="24" value={labelFontSize}
                     onChange={(e) => setLabelFontSize(parseInt(e.target.value))}
                     style={{ width: '100%', accentColor: 'var(--accent-color)' }}
                   />
@@ -749,8 +755,8 @@ function AppContent() {
                     <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>LINE WEIGHT</label>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-main)' }}>{lineThickness}px</span>
                   </div>
-                  <input 
-                    type="range" min="1" max="5" step="0.5" value={lineThickness} 
+                  <input
+                    type="range" min="1" max="5" step="0.5" value={lineThickness}
                     onChange={(e) => setLineThickness(parseFloat(e.target.value))}
                     style={{ width: '100%', accentColor: 'var(--accent-color)' }}
                   />
@@ -761,13 +767,13 @@ function AppContent() {
                   <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>LABEL POSITION</label>
                   <div style={{ display: 'flex', gap: '2px' }}>
                     {(['image1', 'center', 'image2'] as const).map(pos => (
-                      <button 
+                      <button
                         key={pos}
                         onClick={() => setLabelPosition(pos)}
-                        style={{ 
-                          ...buttonStyle, 
-                          flex: 1, 
-                          fontSize: '0.65rem', 
+                        style={{
+                          ...buttonStyle,
+                          flex: 1,
+                          fontSize: '0.65rem',
                           padding: '4px 2px',
                           backgroundColor: labelPosition === pos ? 'var(--accent-color)' : 'transparent',
                           color: labelPosition === pos ? 'var(--btn-text)' : 'var(--text-main)',
@@ -790,27 +796,31 @@ function AppContent() {
                 No annotations yet. <br />Use the "Add Annotation" tool above.
               </p>
             ) : (
-              annotations.map((ann, index) => (
-                <AnnotationListItem
-                  key={ann.id}
-                  ann={ann}
-                  isFirst={index === 0}
-                  isLast={index === annotations.length - 1}
-                  isNew={index === annotations.length - 1 && annotations.length > prevAnnotationsCount.current}
-                  onDelete={() => {
-                    setAnnotations(prev => prev.filter(a => a.id !== ann.id));
-                  }}
-                  onChangeText={(text) => {
-                    setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, text } : a));
-                  }}
-                  onChangeColor={(color) => {
-                    setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, color } : a));
-                    setLastUsedColor(color);
-                  }}
-                  onMoveUp={() => moveAnnotation(index, 'up')}
-                  onMoveDown={() => moveAnnotation(index, 'down')}
-                />
-              ))
+              annotations.map((ann, index) => {
+                const displayLabel = labelType === 'alphabetic' ? getAlphabeticLabel(index) : (index + 1).toString();
+                return (
+                  <AnnotationListItem
+                    key={ann.id}
+                    ann={ann}
+                    displayLabel={displayLabel}
+                    isFirst={index === 0}
+                    isLast={index === annotations.length - 1}
+                    isNew={index === annotations.length - 1 && annotations.length > prevAnnotationsCount.current}
+                    onDelete={() => {
+                      setAnnotations(prev => prev.filter(a => a.id !== ann.id));
+                    }}
+                    onChangeText={(text) => {
+                      setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, text } : a));
+                    }}
+                    onChangeColor={(color) => {
+                      setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, color } : a));
+                      setLastUsedColor(color);
+                    }}
+                    onMoveUp={() => moveAnnotation(index, 'up')}
+                    onMoveDown={() => moveAnnotation(index, 'down')}
+                  />
+                );
+              })
             )}
             {/* Capture the count for next render */}
             {(() => { prevAnnotationsCount.current = annotations.length; return null; })()}
@@ -882,7 +892,7 @@ function AppContent() {
           </svg>
 
           {editingAnn && (
-            <ResizePopover 
+            <ResizePopover
               ann={editingAnn}
               onUpdate={(updates) => {
                 setAnnotations(prev => prev.map(a => a.id === editingAnn.id ? { ...a, ...updates } : a));
