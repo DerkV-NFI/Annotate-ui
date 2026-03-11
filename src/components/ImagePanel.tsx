@@ -256,6 +256,7 @@ export function ImagePanel({ panelId }: ImagePanelProps) {
   return (
     <div 
       ref={containerRef}
+      data-transparent-on-export="true"
       style={{
         flex: 1,
         display: 'flex',
@@ -277,8 +278,10 @@ export function ImagePanel({ panelId }: ImagePanelProps) {
     >
       {/* Zoom Controls Overlay */}
       {imageSrc && (
-        <div style={{
-          position: 'absolute',
+        <div 
+          data-html2canvas-ignore="true"
+          style={{
+            position: 'absolute',
           top: '12px',
           right: '12px',
           display: 'flex',

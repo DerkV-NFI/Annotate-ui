@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import html2canvas from 'html2canvas';
+import { domToPng } from 'modern-screenshot';
 import './index.css';
 import { ImagePanel } from './components/ImagePanel';
 import { SvgOverlay } from './components/SvgOverlay';
@@ -513,22 +513,121 @@ function AppContent() {
     if (!mainRef.current) return;
     setIsExporting(true);
     try {
-      // html2canvas sometimes needs a small delay to ensure all CSS transforms are settled
-      const canvas = await html2canvas(mainRef.current, {
-        useCORS: true, // Allow loading remote images if applicable
-        backgroundColor: null, // Transparent background as requested
-        scale: 2, // Higher quality scale
-        logging: false,
+      const main = mainRef.current;
+      const mainRect = main.getBoundingClientRect();
+      
+      // 1. Find bounding box of all images and annotations in screen coordinates
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      let foundContent = false;
+
+      // Check images
+      const images = main.querySelectorAll('img');
+      images.forEach(img => {
+        const rect = img.getBoundingClientRect();
+        if (rect.width > 1 && rect.height > 1) { // Ignore tiny placeholders
+          minX = Math.min(minX, rect.left);
+          minY = Math.min(minY, rect.top);
+          maxX = Math.max(maxX, rect.right);
+          maxY = Math.max(maxY, rect.bottom);
+          foundContent = true;
+        }
       });
 
-      const url = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `forensic_export_${new Date().getTime()}.png`;
-      link.click();
+      // Check SVG annotations markers/labels
+      const svg = main.querySelector('svg');
+      if (svg) {
+        const markers = svg.querySelectorAll('circle, text, path');
+        markers.forEach(m => {
+          const sRect = (m as SVGElement).getBoundingClientRect();
+          if (sRect.width > 0 && sRect.height > 0) {
+            minX = Math.min(minX, sRect.left);
+            minY = Math.min(minY, sRect.top);
+            maxX = Math.max(maxX, sRect.right);
+            maxY = Math.max(maxY, sRect.bottom);
+            foundContent = true;
+          }
+        });
+      }
+
+      // If no markers found but we have images, use images. 
+      // If nothing found at all, use main rect.
+      if (!foundContent) {
+        minX = mainRect.left;
+        minY = mainRect.top;
+        maxX = mainRect.right;
+        maxY = mainRect.bottom;
+      }
+
+      // 2. Add padding (20px) and clamp to main area
+      const padding = 20;
+      minX = Math.max(mainRect.left, minX - padding);
+      minY = Math.max(mainRect.top, minY - padding);
+      maxX = Math.min(mainRect.right, maxX + padding);
+      maxY = Math.min(mainRect.bottom, maxY + padding);
+
+      const width = maxX - minX;
+      const height = maxY - minY;
+
+      if (width <= 0 || height <= 0) throw new Error("Invalid export dimensions");
+
+      // 3. Temporarily strip all backgrounds for true transparency
+      const nodesWithBg = main.querySelectorAll('[data-transparent-on-export="true"]');
+      const originalBgs = new Map<HTMLElement, string>();
+      
+      const setTransparent = (el: HTMLElement) => {
+        originalBgs.set(el, el.style.backgroundColor);
+        el.style.backgroundColor = 'transparent';
+      };
+
+      setTransparent(main);
+      nodesWithBg.forEach(node => setTransparent(node as HTMLElement));
+
+      // 4. Capture the full stage
+      const dataUrl = await domToPng(main, {
+        scale: 2,
+        backgroundColor: 'rgba(0,0,0,0)',
+        filter: (node: Node) => {
+          if (node instanceof HTMLElement && node.hasAttribute('data-html2canvas-ignore')) {
+            return false;
+          }
+          return true;
+        }
+      });
+
+      // Restore backgrounds immediately
+      originalBgs.forEach((bg, el) => { el.style.backgroundColor = bg; });
+
+      // 5. Crop the resulting image to our calculated bounds
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // Coordinates are relative to main container
+        const cropX = minX - mainRect.left;
+        const cropY = minY - mainRect.top;
+        
+        canvas.width = width * 2;
+        canvas.height = height * 2;
+        
+        ctx.drawImage(
+          img,
+          cropX * 2, cropY * 2, width * 2, height * 2, // Source (at scale 2)
+          0, 0, width * 2, height * 2                  // Destination
+        );
+
+        const finalUrl = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.href = finalUrl;
+        link.download = `forensic_report_${new Date().getTime()}.png`;
+        link.click();
+        setIsExporting(false);
+      };
+      img.src = dataUrl;
+
     } catch (err) {
       console.error('Export failed:', err);
-    } finally {
       setIsExporting(false);
     }
   };
@@ -861,6 +960,7 @@ function AppContent() {
         {/* Dual Panel Layout */}
         <main
           ref={mainRef}
+          data-transparent-on-export="true"
           style={{
             flex: 1,
             display: 'flex',
@@ -870,13 +970,17 @@ function AppContent() {
           }}
         >
           {/* Panel 1 */}
-          <ImagePanel panelId="1" />
+          <div data-transparent-on-export="true" style={{ flex: 1, display: 'flex' }}>
+            <ImagePanel panelId="1" />
+          </div>
 
           {/* Divider */}
-          <div style={dividerStyle(layoutMode)}></div>
+          <div data-html2canvas-ignore="true" style={dividerStyle(layoutMode)}></div>
 
           {/* Panel 2 */}
-          <ImagePanel panelId="2" />
+          <div data-transparent-on-export="true" style={{ flex: 1, display: 'flex' }}>
+            <ImagePanel panelId="2" />
+          </div>
 
           {/* SVG Overlay */}
           <svg style={{
@@ -892,13 +996,15 @@ function AppContent() {
           </svg>
 
           {editingAnn && (
-            <ResizePopover
-              ann={editingAnn}
-              onUpdate={(updates) => {
-                setAnnotations(prev => prev.map(a => a.id === editingAnn.id ? { ...a, ...updates } : a));
-              }}
-              onClose={() => setEditingAnnotationId(null)}
-            />
+            <div data-html2canvas-ignore="true">
+              <ResizePopover
+                ann={editingAnn}
+                onUpdate={(updates) => {
+                  setAnnotations(prev => prev.map(a => a.id === editingAnn.id ? { ...a, ...updates } : a));
+                }}
+                onClose={() => setEditingAnnotationId(null)}
+              />
+            </div>
           )}
         </main>
       </div>
