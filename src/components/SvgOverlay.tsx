@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAppState } from '../state/AppStateContext';
+import { useAppState, getAlphabeticLabel } from '../state/AppStateContext';
 import type { AnnotationPoint } from '../state/AppStateContext';
 import { imageToScreenCoords } from '../utils/coordinates';
 import type { Point } from '../utils/coordinates';
@@ -13,7 +13,13 @@ export function SvgOverlay() {
     imageSizes,
     editingAnnotationId,
     setEditingAnnotationId,
-    workspaceRect
+    workspaceRect,
+    labelType,
+    labelFontSize,
+    showLabelBackground,
+    lineThickness,
+    labelPosition,
+    labelColor
   } = useAppState();
   const [mousePos, setMousePos] = React.useState<Point | null>(null);
 
@@ -63,11 +69,41 @@ export function SvgOverlay() {
     );
   };
 
-  const renderArrow = (start: Point, end: Point, color: string = 'var(--accent-color)') => {
+  const getEllipseIntersection = (center: Point, target: Point, rx: number, ry: number, rotation: number): Point => {
+    const dx = target.x - center.x;
+    const dy = target.y - center.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 0.1) return center;
+
+    const rad = (rotation * Math.PI) / 180;
+    const cos = Math.cos(-rad);
+    const sin = Math.sin(-rad);
+    
+    // Rotate vector into local ellipse space
+    const vx = dx * cos - dy * sin;
+    const vy = dx * sin + dy * cos;
+
+    // Solve for intersection with canonical ellipse: (vx*k/rx)^2 + (vy*k/ry)^2 = 1
+    const k = 1 / Math.sqrt(Math.pow(vx / rx, 2) + Math.pow(vy / ry, 2));
+
+    // Transform back to world space
+    const ix_local = vx * k;
+    const iy_local = vy * k;
+    
+    const cos_w = Math.cos(rad);
+    const sin_w = Math.sin(rad);
+    
+    return {
+      x: center.x + (ix_local * cos_w - iy_local * sin_w),
+      y: center.y + (ix_local * sin_w + iy_local * cos_w)
+    };
+  };
+
+  const renderArrow = (start: Point, end: Point, color: string = 'var(--accent-color)', hideHeads: boolean = false) => {
     const dx = end.x - start.x;
     const dy = end.y - start.y;
     const angle = Math.atan2(dy, dx);
-    const headLen = 12;
+    const headLen = 6 + lineThickness * 3; // Scale head with line thickness
     
     // End arrow head
     const headX1 = end.x - headLen * Math.cos(angle - Math.PI / 6);
@@ -84,11 +120,15 @@ export function SvgOverlay() {
 
     return (
       <g style={{ pointerEvents: 'none' }}>
-        <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke={color} strokeWidth="2" strokeOpacity="0.8" />
-        {/* End Head */}
-        <polygon points={`${end.x},${end.y} ${headX1},${headY1} ${headX2},${headY2}`} fill={color} fillOpacity="0.8" />
-        {/* Start Head */}
-        <polygon points={`${start.x},${start.y} ${headX1_s},${headY1_s} ${headX2_s},${headY2_s}`} fill={color} fillOpacity="0.8" />
+        <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke={color} strokeWidth={lineThickness} strokeOpacity="0.8" />
+        {!hideHeads && (
+          <>
+            {/* End Head */}
+            <polygon points={`${end.x},${end.y} ${headX1},${headY1} ${headX2},${headY2}`} fill={color} fillOpacity="0.8" />
+            {/* Start Head */}
+            <polygon points={`${start.x},${start.y} ${headX1_s},${headY1_s} ${headX2_s},${headY2_s}`} fill={color} fillOpacity="0.8" />
+          </>
+        )}
       </g>
     );
   };
@@ -106,9 +146,41 @@ export function SvgOverlay() {
         y: mousePos.y - workspaceRect.top
       };
 
+      if (activeAnnotation.type === 'area') {
+        const panelId = activeAnnotation.points[0].panelId;
+        const isP1_2 = panelId === '2';
+        const isUnlinked = activeAnnotation.isLocked === false;
+
+        const rx = (isP1_2 && isUnlinked && activeAnnotation.radius2 !== undefined ? activeAnnotation.radius2 : (activeAnnotation.radius || 30)) * panelTransforms[panelId].scale;
+        const ry = (isP1_2 && isUnlinked && activeAnnotation.ry2 !== undefined ? activeAnnotation.ry2 : (activeAnnotation.ry || activeAnnotation.radius || 30)) * panelTransforms[panelId].scale;
+        const rot = (isP1_2 && isUnlinked && activeAnnotation.rotation2 !== undefined ? activeAnnotation.rotation2 : (activeAnnotation.rotation || 0));
+
+        const startI = getEllipseIntersection(p1, calibratedMouse, rx, ry, rot);
+        
+        return (
+          <g>
+            {renderArrow(startI, calibratedMouse, 'rgba(255, 152, 0, 0.5)')}
+            <ellipse 
+              cx={p1.x} cy={p1.y} rx={rx} ry={ry} 
+              transform={`rotate(${rot}, ${p1.x}, ${p1.y})`}
+              fill="none" stroke="#ff9800" strokeWidth="1" strokeDasharray="4 2" 
+            />
+          </g>
+        );
+      }
+
       return (
         <g>
           {renderArrow(p1, calibratedMouse, 'rgba(255, 152, 0, 0.5)')}
+          {(() => {
+            let labelPos = p1;
+            if (labelPosition === 'center') {
+              labelPos = { x: (p1.x + calibratedMouse.x) / 2, y: (p1.y + calibratedMouse.y) / 2 };
+            } else if (labelPosition === 'image2') {
+              labelPos = calibratedMouse;
+            }
+            return renderLabel(labelPos, activeAnnotation.id === 'draft' ? '?' : '?', 'rgba(255, 152, 0, 0.5)');
+          })()}
           <circle cx={p1.x} cy={p1.y} r="4" fill="none" stroke="#ff9800" strokeWidth="1" />
         </g>
       );
@@ -125,17 +197,20 @@ export function SvgOverlay() {
 
   const renderLabel = (pos: Point, label: string, color: string) => {
     const offset = 20; // Offset label from the actual point
+    const radius = labelFontSize * 0.8 + 2; 
     return (
       <g style={{ pointerEvents: 'auto' }}>
-        <line x1={pos.x} y1={pos.y} x2={pos.x + offset} y2={pos.y - offset} stroke={color} strokeWidth="1" strokeDasharray="2 2" />
-        <circle cx={pos.x + offset} cy={pos.y - offset} r="12" fill="var(--panel-bg)" stroke={color} strokeWidth="2" />
+        <line x1={pos.x} y1={pos.y} x2={pos.x + offset} y2={pos.y - offset} stroke={color} strokeWidth={Math.max(1, lineThickness/2)} strokeDasharray="2 2" />
+        {showLabelBackground && (
+          <circle cx={pos.x + offset} cy={pos.y - offset} r={radius} fill="var(--panel-bg)" stroke={color} strokeWidth="2" />
+        )}
         <text 
           x={pos.x + offset} 
           y={pos.y - offset} 
           textAnchor="middle" 
           dominantBaseline="central" 
-          fill="var(--text-main)" 
-          fontSize="12px" 
+          fill={labelColor} 
+          fontSize={`${labelFontSize}px`} 
           fontWeight="bold"
           fontFamily="sans-serif"
           style={{ pointerEvents: 'none', userSelect: 'none' }}
@@ -147,7 +222,7 @@ export function SvgOverlay() {
   };
 
   const renderCompletedAnnotations = () => {
-    return annotations.map(ann => {
+    return annotations.map((ann, idx) => {
       if (ann.points.length < 1) return null;
       
       const p1 = getScreenCoordinates(ann.points[0]);
@@ -159,13 +234,41 @@ export function SvgOverlay() {
       const p2Visible = ann.points.length > 1 ? isImagePointVisible(ann.points[1].panelId, ann.points[1].imageCoord) : false;
       
       const isEditing = editingAnnotationId === ann.id;
+      const displayLabel = labelType === 'alphabetic' ? getAlphabeticLabel(idx) : (idx + 1).toString();
       
       return (
         <g key={ann.id} style={{ cursor: 'pointer', pointerEvents: 'auto' }} onClick={(e) => {
           e.stopPropagation();
           setEditingAnnotationId(ann.id);
         }}>
-          {p2 && p1Visible && p2Visible && renderArrow(p1, p2, ann.color)}
+          {(() => {
+            if (!p2 || !p1Visible || !p2Visible) return null;
+            
+            if (ann.type === 'area') {
+              // Calculate truncation points for the area markers
+              const panelId1 = ann.points[0].panelId;
+              const panelId2 = ann.points[1].panelId;
+              const isP1_2 = panelId1 === '2';
+              const isP2_2 = panelId2 === '2';
+              const isUnlinked = ann.isLocked === false;
+
+              // Dimensions for marker 1
+              const rx1 = (isP1_2 && isUnlinked && ann.radius2 !== undefined ? ann.radius2 : (ann.radius || 30)) * panelTransforms[panelId1].scale;
+              const ry1 = (isP1_2 && isUnlinked && ann.ry2 !== undefined ? ann.ry2 : (ann.ry || ann.radius || 30)) * panelTransforms[panelId1].scale;
+              const rot1 = (isP1_2 && isUnlinked && ann.rotation2 !== undefined ? ann.rotation2 : (ann.rotation || 0));
+
+              // Dimensions for marker 2
+              const rx2 = (isP2_2 && isUnlinked && ann.radius2 !== undefined ? ann.radius2 : (ann.radius || 30)) * panelTransforms[panelId2].scale;
+              const ry2 = (isP2_2 && isUnlinked && ann.ry2 !== undefined ? ann.ry2 : (ann.ry || ann.radius || 30)) * panelTransforms[panelId2].scale;
+              const rot2 = (isP2_2 && isUnlinked && ann.rotation2 !== undefined ? ann.rotation2 : (ann.rotation || 0));
+
+              const startI = getEllipseIntersection(p1, p2, rx1, ry1, rot1);
+              const endI = getEllipseIntersection(p2, p1, rx2, ry2, rot2);
+              return renderArrow(startI, endI, ann.color, true); // hideHeads for area
+            }
+            
+            return renderArrow(p1, p2, ann.color);
+          })()}
           
           {ann.type === 'area' && (
             // Render on BOTH panels (mirroring)
@@ -197,14 +300,23 @@ export function SvgOverlay() {
                   transform={`rotate(${rotation}, ${mirroredCoords.x}, ${mirroredCoords.y})`}
                   fill={ann.color.startsWith('var') ? "rgba(0, 122, 204, 0.05)" : `${ann.color}22`} 
                   stroke={ann.color} 
-                  strokeWidth={isEditing ? "3" : "1.5"}
+                  strokeWidth={isEditing ? lineThickness * 1.5 : lineThickness}
                   strokeDasharray={isEditing ? "" : "4 2"}
                 />
               );
             })
           )}
 
-          {p1Visible && renderLabel(p1, ann.label, ann.color)}
+          {(() => {
+            if (!p1Visible) return null;
+            let labelPos = p1;
+            if (labelPosition === 'center' && p2 && p2Visible) {
+              labelPos = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+            } else if (labelPosition === 'image2' && p2 && p2Visible) {
+              labelPos = p2;
+            }
+            return renderLabel(labelPos, displayLabel, ann.color);
+          })()}
         </g>
       );
     });

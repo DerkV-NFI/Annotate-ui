@@ -66,7 +66,31 @@ interface AppStateContextType {
   // Popover state
   editingAnnotationId: string | null;
   setEditingAnnotationId: (id: string | null) => void;
+
+  // Global settings
+  labelType: 'numeric' | 'alphabetic';
+  setLabelType: (type: 'numeric' | 'alphabetic') => void;
+  labelFontSize: number;
+  setLabelFontSize: (size: number) => void;
+  showLabelBackground: boolean;
+  setShowLabelBackground: (show: boolean) => void;
+  lineThickness: number;
+  setLineThickness: (thickness: number) => void;
+  labelPosition: 'image1' | 'center' | 'image2';
+  setLabelPosition: (pos: 'image1' | 'center' | 'image2') => void;
+  labelColor: string;
+  setLabelColor: (color: string) => void;
 }
+
+export const getAlphabeticLabel = (index: number): string => {
+  let label = '';
+  let i = index;
+  while (i >= 0) {
+    label = String.fromCharCode((i % 26) + 65) + label;
+    i = Math.floor(i / 26) - 1;
+  }
+  return label;
+};
 
 const AppStateContext = createContext<AppStateContextType | undefined>(undefined);
 
@@ -109,6 +133,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(null);
 
+  const [labelType, setLabelType] = useState<'numeric' | 'alphabetic'>('numeric');
+  const [labelFontSize, setLabelFontSize] = useState<number>(12);
+  const [showLabelBackground, setShowLabelBackground] = useState<boolean>(true);
+  const [lineThickness, setLineThickness] = useState<number>(2);
+  const [labelPosition, setLabelPosition] = useState<'image1' | 'center' | 'image2'>('image1');
+  const [labelColor, setLabelColor] = useState<string>('var(--text-main)');
+
   return (
     <AppStateContext.Provider value={{
       annotations,
@@ -132,7 +163,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       theme,
       setTheme,
       editingAnnotationId,
-      setEditingAnnotationId
+      setEditingAnnotationId,
+      labelType,
+      setLabelType,
+      labelFontSize,
+      setLabelFontSize,
+      showLabelBackground,
+      setShowLabelBackground,
+      lineThickness,
+      setLineThickness,
+      labelPosition,
+      setLabelPosition,
+      labelColor,
+      setLabelColor
     }}>
       {children}
     </AppStateContext.Provider>

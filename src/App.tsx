@@ -3,7 +3,7 @@ import html2canvas from 'html2canvas';
 import './index.css';
 import { ImagePanel } from './components/ImagePanel';
 import { SvgOverlay } from './components/SvgOverlay';
-import { AppStateProvider, useAppState } from './state/AppStateContext';
+import { AppStateProvider, useAppState, getAlphabeticLabel } from './state/AppStateContext';
 import type { Annotation } from './state/AppStateContext';
 
 function AnnotationListItem({
@@ -353,8 +353,21 @@ function AppContent() {
     setWorkspaceRect,
     setLastUsedColor,
     theme,
-    setTheme
+    setTheme,
+    labelType,
+    setLabelType,
+    labelFontSize,
+    setLabelFontSize,
+    showLabelBackground,
+    setShowLabelBackground,
+    lineThickness,
+    setLineThickness,
+    labelPosition,
+    setLabelPosition,
+    labelColor,
+    setLabelColor
   } = useAppState();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const prevAnnotationsCount = useRef(annotations.length);
 
@@ -387,22 +400,24 @@ function AppContent() {
       next[index] = next[targetIndex];
       next[targetIndex] = temp;
 
-      // Update labels after swap
-      return next.map((ann, i) => ({ ...ann, label: (i + 1).toString() }));
+      return next;
     });
   };
 
   const exportCSV = () => {
     const headers = ['Label', 'Type', 'Description', 'Image 1 X', 'Image 1 Y', 'Image 2 X', 'Image 2 Y'];
-    const rows = annotations.map(ann => [
-      ann.label,
-      ann.type,
-      ann.text.replace(/"/g, '""'),
-      ann.points[0]?.imageCoord.x.toFixed(2) || '',
-      ann.points[0]?.imageCoord.y.toFixed(2) || '',
-      ann.points[1]?.imageCoord.x.toFixed(2) || '',
-      ann.points[1]?.imageCoord.y.toFixed(2) || '',
-    ]);
+    const rows = annotations.map((ann, idx) => {
+      const displayLabel = labelType === 'alphabetic' ? getAlphabeticLabel(idx) : (idx + 1).toString();
+      return [
+        displayLabel,
+        ann.type,
+        ann.text.replace(/"/g, '""'),
+        ann.points[0]?.imageCoord.x.toFixed(2) || '',
+        ann.points[0]?.imageCoord.y.toFixed(2) || '',
+        ann.points[1]?.imageCoord.x.toFixed(2) || '',
+        ann.points[1]?.imageCoord.y.toFixed(2) || '',
+      ];
+    });
 
     const csvContent = [
       headers.join(','),
@@ -531,7 +546,7 @@ function AppContent() {
               }}
               title="Add Point Annotation"
             >
-            <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--btn-text)' : 'var(--text-main)' }}>+</span>
+              <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--btn-text)' : 'var(--text-main)' }}>+</span>
               <span style={{ fontSize: '1rem', color: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--btn-text)' : 'var(--text-main)' }}>↗</span>
             </button>
             <button
@@ -551,9 +566,155 @@ function AppContent() {
               }}
               title="Add Area Annotation"
             >
-            <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--btn-text)' : 'var(--text-main)' }}>+</span>
+              <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--btn-text)' : 'var(--text-main)' }}>+</span>
               <span style={{ fontSize: '1rem', color: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--btn-text)' : 'var(--text-main)' }}>○</span>
             </button>
+          </div>
+
+          {/* Annotation Settings Collapsible */}
+          <div style={{ marginBottom: '16px', border: '1px solid var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
+            <button 
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                backgroundColor: 'var(--panel-bg)',
+                border: 'none',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'pointer',
+                color: 'var(--text-main)',
+                fontSize: '0.85rem',
+                fontWeight: 'bold'
+              }}
+            >
+              Annotation Settings
+              <span>{isSettingsOpen ? '▼' : '▶'}</span>
+            </button>
+            
+            {isSettingsOpen && (
+              <div style={{ padding: '12px', backgroundColor: 'var(--panel-bg)', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border-color)' }}>
+                {/* Numbering Type */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>NUMBERING FORMAT</label>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button 
+                      onClick={() => setLabelType('numeric')}
+                      style={{ 
+                        ...buttonStyle, 
+                        flex: 1, 
+                        fontSize: '0.7rem', 
+                        padding: '4px',
+                        backgroundColor: labelType === 'numeric' ? 'var(--accent-color)' : 'transparent',
+                        color: labelType === 'numeric' ? 'var(--btn-text)' : 'var(--text-main)',
+                        borderColor: labelType === 'numeric' ? 'var(--accent-color)' : 'var(--border-color)'
+                      }}
+                    >
+                      1, 2, 3
+                    </button>
+                    <button 
+                      onClick={() => setLabelType('alphabetic')}
+                      style={{ 
+                        ...buttonStyle, 
+                        flex: 1, 
+                        fontSize: '0.7rem', 
+                        padding: '4px',
+                        backgroundColor: labelType === 'alphabetic' ? 'var(--accent-color)' : 'transparent',
+                        color: labelType === 'alphabetic' ? 'var(--btn-text)' : 'var(--text-main)',
+                        borderColor: labelType === 'alphabetic' ? 'var(--accent-color)' : 'var(--border-color)'
+                      }}
+                    >
+                      A, B, C
+                    </button>
+                  </div>
+                </div>
+
+                {/* Background Toggle */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', cursor: 'pointer', userSelect: 'none' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={showLabelBackground} 
+                    onChange={(e) => setShowLabelBackground(e.target.checked)} 
+                  />
+                  Label Background
+                </label>
+
+                {/* Font Size */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>LABEL SIZE</label>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-main)' }}>{labelFontSize}px</span>
+                  </div>
+                  <input 
+                    type="range" min="8" max="24" value={labelFontSize} 
+                    onChange={(e) => setLabelFontSize(parseInt(e.target.value))}
+                    style={{ width: '100%', accentColor: 'var(--accent-color)' }}
+                  />
+                </div>
+
+                {/* Line Thickness */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>LINE WEIGHT</label>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-main)' }}>{lineThickness}px</span>
+                  </div>
+                  <input 
+                    type="range" min="1" max="5" step="0.5" value={lineThickness} 
+                    onChange={(e) => setLineThickness(parseFloat(e.target.value))}
+                    style={{ width: '100%', accentColor: 'var(--accent-color)' }}
+                  />
+                </div>
+
+                {/* Label Position */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>LABEL POSITION</label>
+                  <div style={{ display: 'flex', gap: '2px' }}>
+                    {(['image1', 'center', 'image2'] as const).map(pos => (
+                      <button 
+                        key={pos}
+                        onClick={() => setLabelPosition(pos)}
+                        style={{ 
+                          ...buttonStyle, 
+                          flex: 1, 
+                          fontSize: '0.65rem', 
+                          padding: '4px 2px',
+                          backgroundColor: labelPosition === pos ? 'var(--accent-color)' : 'transparent',
+                          color: labelPosition === pos ? 'var(--btn-text)' : 'var(--text-main)',
+                          borderColor: labelPosition === pos ? 'var(--accent-color)' : 'var(--border-color)',
+                          textTransform: 'capitalize'
+                        }}
+                      >
+                        {pos === 'image1' ? 'Img 1' : pos === 'image2' ? 'Img 2' : 'Center'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Label Color */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>LABEL TEXT COLOR</label>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {['#ffffff', '#000000', '#ffeb3b', '#4caf50', '#2196f3', '#f44336', 'var(--text-main)'].map(c => (
+                      <button
+                        key={c}
+                        onClick={() => setLabelColor(c)}
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '50%',
+                          backgroundColor: c.startsWith('var') ? 'var(--text-main)' : c,
+                          border: labelColor === c ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                          padding: 0,
+                          cursor: 'pointer'
+                        }}
+                        title={c === 'var(--text-main)' ? 'Default Text Color' : c}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -570,7 +731,7 @@ function AppContent() {
                   isLast={index === annotations.length - 1}
                   isNew={index === annotations.length - 1 && annotations.length > prevAnnotationsCount.current}
                   onDelete={() => {
-                    setAnnotations(prev => prev.filter(a => a.id !== ann.id).map((a, i) => ({ ...a, label: (i + 1).toString() })));
+                    setAnnotations(prev => prev.filter(a => a.id !== ann.id));
                   }}
                   onChangeText={(text) => {
                     setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, text } : a));

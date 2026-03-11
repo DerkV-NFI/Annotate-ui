@@ -284,7 +284,8 @@ export function ImagePanel({ panelId }: ImagePanelProps) {
           display: 'flex',
           gap: '8px',
           alignItems: 'center',
-          backgroundColor: 'rgba(30, 30, 30, 0.8)',
+          backgroundColor: 'var(--panel-bg)', // Themed background
+          opacity: 0.9,
           padding: '4px 8px',
           borderRadius: '4px',
           border: '1px solid var(--border-color)',
