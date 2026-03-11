@@ -7,7 +7,6 @@ interface ImagePanelProps {
 }
 
 export function ImagePanel({ panelId }: ImagePanelProps) {
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
   const { 
     setPanelTransform, 
     setPanelRect, 
@@ -18,8 +17,12 @@ export function ImagePanel({ panelId }: ImagePanelProps) {
     setActiveAnnotation,
     setAnnotations,
     activeMarkerType,
-    lastUsedColor
+    lastUsedColor,
+    imageSrcs,
+    setImageSrc
   } = useAppState();
+  
+  const imageSrc = imageSrcs[panelId];
   
   // Drag & drop state
   // Drag & drop state
@@ -81,11 +84,16 @@ export function ImagePanel({ panelId }: ImagePanelProps) {
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
       if (file.type.startsWith('image/')) {
-        const url = URL.createObjectURL(file);
-        setImageSrc(url);
-        // Reset view
-        setScale(1);
-        setOffset({ x: 0, y: 0 });
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (event.target?.result) {
+            setImageSrc(panelId, event.target.result as string);
+            // Reset view
+            setScale(1);
+            setOffset({ x: 0, y: 0 });
+          }
+        };
+        reader.readAsDataURL(file);
       }
     }
   };
@@ -94,11 +102,16 @@ export function ImagePanel({ panelId }: ImagePanelProps) {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       if (file.type.startsWith('image/')) {
-        const url = URL.createObjectURL(file);
-        setImageSrc(url);
-        // Reset view
-        setScale(1);
-        setOffset({ x: 0, y: 0 });
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (event.target?.result) {
+            setImageSrc(panelId, event.target.result as string);
+            // Reset view
+            setScale(1);
+            setOffset({ x: 0, y: 0 });
+          }
+        };
+        reader.readAsDataURL(file);
       }
     }
   };

@@ -63,6 +63,12 @@ interface AppStateContextType {
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
 
+  layoutMode: 'side-by-side' | 'top-bottom';
+  setLayoutMode: (mode: 'side-by-side' | 'top-bottom' | ((prev: 'side-by-side' | 'top-bottom') => 'side-by-side' | 'top-bottom')) => void;
+
+  imageSrcs: Record<string, string | null>;
+  setImageSrc: (panelId: string, src: string | null) => void;
+
   // Popover state
   editingAnnotationId: string | null;
   setEditingAnnotationId: (id: string | null) => void;
@@ -131,7 +137,24 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const [workspaceRect, setWorkspaceRect] = useState<DOMRect | null>(null);
   const [lastUsedColor, setLastUsedColor] = useState<string>('var(--accent-color)');
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [theme, setThemeState] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('forensic-theme');
+    return (saved as 'light' | 'dark') || 'dark';
+  });
+
+  const setTheme = (newTheme: 'light' | 'dark') => {
+    setThemeState(newTheme);
+    localStorage.setItem('forensic-theme', newTheme);
+  };
+  const [layoutMode, setLayoutMode] = useState<'side-by-side' | 'top-bottom'>('side-by-side');
+  const [imageSrcs, setImageSrcs] = useState<Record<string, string | null>>({
+    '1': null,
+    '2': null
+  });
+
+  const setImageSrc = (panelId: string, src: string | null) => {
+    setImageSrcs(prev => ({ ...prev, [panelId]: src }));
+  };
 
   const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(null);
 
@@ -180,7 +203,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       labelColor,
       setLabelColor,
       labelBgColor,
-      setLabelBgColor
+      setLabelBgColor,
+      layoutMode,
+      setLayoutMode,
+      imageSrcs,
+      setImageSrc
     }}>
       {children}
     </AppStateContext.Provider>

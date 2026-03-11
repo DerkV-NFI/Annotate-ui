@@ -395,15 +395,22 @@ function SettingsColorSelection({
 }
 
 function AppContent() {
-  const [layoutMode, setLayoutMode] = useState<'side-by-side' | 'top-bottom'>('side-by-side');
   const [isExporting, setIsExporting] = useState(false);
   const {
+    labelColor,
+    setLabelColor,
+    layoutMode,
+    setLayoutMode,
+    imageSrcs,
+    setImageSrc,
+    panelTransforms,
+    setPanelTransform,
+    annotations,
+    setAnnotations,
     toolMode,
     setToolMode,
     activeMarkerType,
     setActiveMarkerType,
-    annotations,
-    setAnnotations,
     editingAnnotationId,
     setEditingAnnotationId,
     setWorkspaceRect,
@@ -421,9 +428,7 @@ function AppContent() {
     lineThickness,
     setLineThickness,
     labelPosition,
-    setLabelPosition,
-    labelColor,
-    setLabelColor
+    setLabelPosition
   } = useAppState();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
@@ -631,6 +636,77 @@ function AppContent() {
       setIsExporting(false);
     }
   };
+  const saveProject = () => {
+    const projectData = {
+      version: '1.0.0',
+      timestamp: new Date().toISOString(),
+      state: {
+        annotations,
+        imageSrcs,
+        panelTransforms,
+        settings: {
+          layoutMode,
+          labelType,
+          labelFontSize,
+          showLabelBackground,
+          labelBgColor,
+          labelColor,
+          lineThickness,
+          labelPosition
+        }
+      }
+    };
+
+    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `forensic_project_${new Date().getTime()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const loadProject = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.state) {
+          const { state } = data;
+          if (state.annotations) setAnnotations(state.annotations);
+          if (state.imageSrcs) {
+            Object.entries(state.imageSrcs).forEach(([id, src]) => {
+              setImageSrc(id, src as string | null);
+            });
+          }
+          if (state.panelTransforms) {
+            Object.entries(state.panelTransforms).forEach(([id, transform]) => {
+              setPanelTransform(id, transform as any);
+            });
+          }
+          if (state.settings) {
+            const { settings } = state;
+            if (settings.layoutMode) setLayoutMode(settings.layoutMode);
+            if (settings.labelType) setLabelType(settings.labelType);
+            if (settings.labelFontSize) setLabelFontSize(settings.labelFontSize);
+            if (settings.showLabelBackground !== undefined) setShowLabelBackground(settings.showLabelBackground);
+            if (settings.labelBgColor) setLabelBgColor(settings.labelBgColor);
+            if (settings.labelColor) setLabelColor(settings.labelColor);
+            if (settings.lineThickness) setLineThickness(settings.lineThickness);
+            if (settings.labelPosition) setLabelPosition(settings.labelPosition);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load project:', err);
+        alert('Failed to load project file. Invalid format.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
@@ -646,14 +722,29 @@ function AppContent() {
         zIndex: 50 // Above SVG overlay
       }}>
         <h1 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Forensic Annotator</h1>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            style={{ ...buttonStyle, backgroundColor: 'transparent', padding: '4px 8px', fontSize: '1.1rem' }}
-            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
-          >
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={saveProject}
+              style={{ ...buttonStyle, backgroundColor: '#2ecc71', color: 'white', border: 'none' }}
+              title="Save project (JSON)"
+            >
+              Save Project
+            </button>
+            <label 
+              style={{ ...buttonStyle, backgroundColor: '#3498db', color: 'white', border: 'none', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+              title="Load project (JSON)"
+            >
+              Load Project
+              <input type="file" accept=".json" onChange={loadProject} style={{ display: 'none' }} />
+            </label>
+            <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border-color)', margin: '0 8px' }} />
+            <button 
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              style={{ ...buttonStyle, backgroundColor: 'transparent', padding: '4px 8px', fontSize: '1.1rem' }}
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
           <button
             style={buttonStyle}
             onClick={() => setLayoutMode(prev => prev === 'side-by-side' ? 'top-bottom' : 'side-by-side')}
