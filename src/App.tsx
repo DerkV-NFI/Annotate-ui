@@ -804,9 +804,9 @@ function AppContent() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="5" cy="5" r="4.5" fill="#01689b"/>
-            <path d="M7 7L24 24" stroke="#01689b" stroke-width="3" stroke-linecap="round"/>
-            <path d="M18 26L28 28L26 18L18 26Z" fill="#01689b"/>
+            <circle cx="5" cy="27" r="4.5" fill="#01689b"/>
+            <path d="M7 25L24 8" stroke="#01689b" stroke-width="3" stroke-linecap="round"/>
+            <path d="M18 6L28 4L26 14L18 6Z" fill="#01689b"/>
           </svg>
           <h1 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Forensic Annotator</h1>
         </div>
