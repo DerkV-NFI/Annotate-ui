@@ -440,11 +440,43 @@ function AppContent() {
     lineThickness,
     setLineThickness,
     labelPosition,
-    setLabelPosition
+    setLabelPosition,
+    hasUnsavedChanges,
+    setHasUnsavedChanges,
+    projectName,
+    setProjectName
   } = useAppState();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const prevAnnotationsCount = useRef(annotations.length);
+  const isInitialMount = useRef(true);
+
+  // Mark project as unsaved when data changes
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    // Only set to true if not already true, to avoid recursive loops 
+    // though these deps are simple state values
+    if (!hasUnsavedChanges) {
+      setHasUnsavedChanges(true);
+    }
+  }, [
+    annotations, 
+    imageSrcs, 
+    layoutMode, 
+    labelType, 
+    labelFontSize, 
+    showLabelBackground, 
+    labelBgColor, 
+    labelColor, 
+    lineThickness, 
+    labelPosition,
+    setHasUnsavedChanges,
+    projectName,
+    setProjectName
+  ]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -521,8 +553,13 @@ function AppContent() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
+    
+    const fileName = projectName.trim() 
+      ? `${projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.csv`
+      : `forensic_annotations_${new Date().getTime()}.csv`;
+
     link.setAttribute('href', url);
-    link.setAttribute('download', 'forensic_annotations.csv');
+    link.setAttribute('download', fileName);
     link.click();
   };
 
@@ -636,8 +673,13 @@ function AppContent() {
 
         const finalUrl = canvas.toDataURL('image/png');
         const link = document.createElement('a');
+        
+        const fileName = projectName.trim() 
+          ? `${projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`
+          : `forensic_report_${new Date().getTime()}.png`;
+
         link.href = finalUrl;
-        link.download = `forensic_report_${new Date().getTime()}.png`;
+        link.download = fileName;
         link.click();
         setIsExporting(false);
       };
@@ -648,10 +690,29 @@ function AppContent() {
       setIsExporting(false);
     }
   };
+
+  const resetToDefault = () => {
+    if (hasUnsavedChanges) {
+      const choice = confirm('Current project has unsaved changes. Save before starting a new project?\n\nOK = Save and Reset\nCancel = Discard and Reset');
+      if (choice) {
+        saveProject();
+      }
+    } else if (annotations.length > 0 || Object.values(imageSrcs).some(s => s !== null)) {
+      if (!confirm('Start a new project? This will clear all current annotations and images.')) return;
+    }
+
+    setAnnotations([]);
+    setImageSrc('1', null);
+    setImageSrc('2', null);
+    setProjectName('');
+    setHasUnsavedChanges(false);
+  };
+
   const saveProject = () => {
     const projectData = {
       version: '1.0.0',
       timestamp: new Date().toISOString(),
+      projectName,
       state: {
         annotations,
         imageSrcs,
@@ -672,10 +733,16 @@ function AppContent() {
     const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
+    
+    const fileName = projectName.trim() 
+      ? `${projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`
+      : `forensic_project_${new Date().getTime()}.json`;
+
     link.href = url;
-    link.download = `forensic_project_${new Date().getTime()}.json`;
+    link.download = fileName;
     link.click();
     URL.revokeObjectURL(url);
+    setHasUnsavedChanges(false);
   };
 
   const loadProject = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -686,6 +753,7 @@ function AppContent() {
     reader.onload = (event) => {
       try {
         const data = JSON.parse(event.target?.result as string);
+        if (data.projectName) setProjectName(data.projectName);
         if (data.state) {
           const { state } = data;
           if (state.annotations) setAnnotations(state.annotations);
@@ -710,6 +778,7 @@ function AppContent() {
             if (settings.lineThickness) setLineThickness(settings.lineThickness);
             if (settings.labelPosition) setLabelPosition(settings.labelPosition);
           }
+          setHasUnsavedChanges(false);
         }
       } catch (err) {
         console.error('Failed to load project:', err);
@@ -734,7 +803,34 @@ function AppContent() {
         zIndex: 50 // Above SVG overlay
       }}>
         <h1 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Forensic Annotator</h1>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'center' }}>
+          <input
+            type="text"
+            placeholder="Project Name..."
+            value={projectName}
+            onChange={(e) => setProjectName(e.target.value)}
+            style={{
+              backgroundColor: 'var(--bg-color)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-main)',
+              padding: '6px 12px',
+              borderRadius: '4px',
+              fontSize: '0.9rem',
+              width: '200px',
+              outline: 'none'
+            }}
+          />
+        </div>
+
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            onClick={resetToDefault}
+            style={{ ...buttonStyle, backgroundColor: '#95a5a6', color: 'white', border: 'none' }}
+            title="Start a new project (clear all)"
+          >
+            New Project
+          </button>
           <button
             onClick={saveProject}
             style={{ ...buttonStyle, backgroundColor: '#2ecc71', color: 'white', border: 'none' }}

@@ -88,6 +88,10 @@ interface AppStateContextType {
   setLabelColor: (color: string) => void;
   labelBgColor: string;
   setLabelBgColor: (color: string) => void;
+  hasUnsavedChanges: boolean;
+  setHasUnsavedChanges: (hasChanges: boolean) => void;
+  projectName: string;
+  setProjectName: (name: string) => void;
 }
 
 export const getAlphabeticLabel = (index: number): string => {
@@ -165,6 +169,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [labelPosition, setLabelPosition] = useState<'image1' | 'center' | 'image2'>('image1');
   const [labelColor, setLabelColor] = useState<string>('var(--text-main)');
   const [labelBgColor, setLabelBgColor] = useState<string>('var(--panel-bg)');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const [projectName, setProjectName] = useState<string>('');
 
   return (
     <AppStateContext.Provider value={{
@@ -207,7 +213,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       layoutMode,
       setLayoutMode,
       imageSrcs,
-      setImageSrc
+      setImageSrc,
+      hasUnsavedChanges,
+      setHasUnsavedChanges,
+      projectName,
+      setProjectName
     }}>
       {children}
     </AppStateContext.Provider>
