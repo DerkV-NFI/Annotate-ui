@@ -201,7 +201,19 @@ function ResizePopover({
       </div>
 
       <button
-        onClick={() => onUpdate({ isLocked: !isLocked })}
+        onClick={() => {
+          const nextLocked = !isLocked;
+          const updates: Partial<Annotation> = { isLocked: nextLocked };
+          
+          // When unlinking, copy current Panel 1 settings to Panel 2 for continuity
+          if (!nextLocked) {
+            updates.radius2 = ann.radius || 30;
+            updates.ry2 = ann.ry || ann.radius || 30;
+            updates.rotation2 = ann.rotation || 0;
+          }
+          
+          onUpdate(updates);
+        }}
         style={{
           ...buttonStyle,
           backgroundColor: isLocked ? 'var(--accent-color)' : 'transparent',
@@ -248,7 +260,7 @@ function ResizePopover({
           <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Rotation (°)</label>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <input
-              type="range" min="0" max="359" step="1"
+              type="range" min="-180" max="180" step="1"
               value={ann.rotation || 0}
               onChange={(e) => onUpdate({ rotation: parseInt(e.target.value) })}
               style={{ flex: 1 }}
@@ -292,7 +304,7 @@ function ResizePopover({
             <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Rotation (°)</label>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <input
-                type="range" min="0" max="359" step="1"
+                type="range" min="-180" max="180" step="1"
                 value={ann.rotation2 || ann.rotation || 0}
                 onChange={(e) => onUpdate({ rotation2: parseInt(e.target.value) })}
                 style={{ flex: 1 }}
