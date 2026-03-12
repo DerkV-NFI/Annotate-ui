@@ -802,7 +802,14 @@ function AppContent() {
         justifyContent: 'space-between',
         zIndex: 50 // Above SVG overlay
       }}>
-        <h1 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Forensic Annotator</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="5" cy="5" r="4.5" fill="#01689b"/>
+            <path d="M7 7L24 24" stroke="#01689b" stroke-width="3" stroke-linecap="round"/>
+            <path d="M18 26L28 28L26 18L18 26Z" fill="#01689b"/>
+          </svg>
+          <h1 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Forensic Annotator</h1>
+        </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'center' }}>
           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Project name:</span>
