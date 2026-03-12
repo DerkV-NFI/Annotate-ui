@@ -1058,7 +1058,8 @@ function AppContent() {
             position: 'relative',
             backgroundColor: 'var(--bg-color)', // Themed background
             minWidth: 0,
-            minHeight: 0
+            minHeight: 0,
+            userSelect: 'none'
           }}
         >
           {/* Panel 1 */}

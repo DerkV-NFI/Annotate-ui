@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAppState, getAlphabeticLabel } from '../state/AppStateContext';
-import type { AnnotationPoint } from '../state/AppStateContext';
-import { imageToScreenCoords } from '../utils/coordinates';
+import type { AnnotationPoint, Annotation } from '../state/AppStateContext';
+import { imageToScreenCoords, screenToImageCoords } from '../utils/coordinates';
 import type { Point } from '../utils/coordinates';
 
 export function SvgOverlay() {
@@ -20,17 +20,71 @@ export function SvgOverlay() {
     lineThickness,
     labelPosition,
     labelColor,
-    labelBgColor
+    labelBgColor,
+    setAnnotations
   } = useAppState();
   const [mousePos, setMousePos] = React.useState<Point | null>(null);
+  const [dragState, setDragState] = React.useState<{ annId: string, pointIndex: number } | null>(null);
+  const [hoveredAnnId, setHoveredAnnId] = React.useState<string | null>(null);
+  const isDraggingRef = React.useRef(false);
 
   React.useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       setMousePos({ x: e.clientX, y: e.clientY });
+
+      if (dragState) {
+        if (!isDraggingRef.current) isDraggingRef.current = true;
+        // Find panel under mouse
+        let targetPanelId: string | null = null;
+        for (const [id, rect] of Object.entries(panelRects)) {
+          if (!rect) continue;
+          if (e.clientX >= rect.left && e.clientX <= rect.right && 
+              e.clientY >= rect.top && e.clientY <= rect.bottom) {
+            targetPanelId = id;
+            break;
+          }
+        }
+
+        if (targetPanelId) {
+          const rect = panelRects[targetPanelId];
+          const transform = panelTransforms[targetPanelId];
+          const imgSize = imageSizes[targetPanelId];
+
+          if (rect && transform && imgSize) {
+            const imageCoord = screenToImageCoords(
+              { x: e.clientX, y: e.clientY },
+              transform,
+              rect,
+              imgSize
+            );
+
+            setAnnotations((prev: Annotation[]) => prev.map((ann: Annotation) => {
+              if (ann.id === dragState.annId) {
+                const newPoints = [...ann.points];
+                newPoints[dragState.pointIndex] = {
+                  panelId: targetPanelId!,
+                  imageCoord
+                };
+                return { ...ann, points: newPoints };
+              }
+              return ann;
+            }));
+          }
+        }
+      }
     };
+
+    const handleMouseUp = () => {
+      setDragState(null);
+    };
+
     window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [dragState, panelRects, panelTransforms, imageSizes, setAnnotations]);
 
   // Helper to convert an AnnotationPoint to global screen coordinates
   const getScreenCoordinates = (pt: AnnotationPoint): Point | null => {
@@ -211,6 +265,24 @@ export function SvgOverlay() {
     return null;
   };
 
+  const renderHandle = (pos: Point, annId: string, pointIndex: number, color: string) => {
+    return (
+      <circle 
+        cx={pos.x} cy={pos.y} r={10} 
+        fill="transparent" 
+        stroke={dragState?.annId === annId && dragState?.pointIndex === pointIndex ? color : "transparent"}
+        strokeWidth="1"
+        style={{ cursor: 'move', pointerEvents: 'auto' }}
+        onMouseDown={(e) => {
+          e.preventDefault(); // Prevent text selection
+          e.stopPropagation();
+          isDraggingRef.current = false;
+          setDragState({ annId, pointIndex });
+        }}
+      />
+    );
+  };
+
   const renderLabel = (pos: Point, label: string, color: string) => {
     const offset = 20; // Offset label from the actual point
     const radius = labelFontSize * 0.8 + 2; 
@@ -253,10 +325,19 @@ export function SvgOverlay() {
       const displayLabel = labelType === 'alphabetic' ? getAlphabeticLabel(idx) : (idx + 1).toString();
       
       return (
-        <g key={ann.id} style={{ cursor: 'pointer', pointerEvents: 'auto' }} onClick={(e) => {
-          e.stopPropagation();
-          setEditingAnnotationId(ann.id);
-        }}>
+        <g 
+          key={ann.id} 
+          style={{ cursor: 'pointer', pointerEvents: 'auto' }} 
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!isDraggingRef.current) {
+              setEditingAnnotationId(ann.id);
+            }
+            isDraggingRef.current = false;
+          }}
+          onMouseEnter={() => setHoveredAnnId(ann.id)}
+          onMouseLeave={() => setHoveredAnnId(null)}
+        >
           {(() => {
             if (!p2 || !p1Visible || !p2Visible) return null;
             
@@ -323,6 +404,22 @@ export function SvgOverlay() {
             })
           )}
 
+          {/* Hover node dots for Area markers */}
+          {ann.type === 'area' && hoveredAnnId === ann.id && (
+            ann.points.map((pt, pIdx) => {
+              const coords = getCoordsForPanel(pt.panelId, pt.imageCoord);
+              if (!coords) return null;
+              return (
+                <circle 
+                  key={`node-${ann.id}-${pIdx}`}
+                  cx={coords.x} cy={coords.y} r="4" 
+                  fill={ann.color} 
+                  style={{ pointerEvents: 'none' }} 
+                />
+              );
+            })
+          )}
+
           {(() => {
             const pt1 = ann.points[0];
             const pt2 = ann.points.length > 1 ? ann.points[1] : null;
@@ -344,6 +441,10 @@ export function SvgOverlay() {
             
             return renderLabel(labelPos, displayLabel, ann.color);
           })()}
+
+          {/* Draggable Handles */}
+          {p1Visible && renderHandle(p1, ann.id, 0, ann.color)}
+          {p2 && p2Visible && renderHandle(p2, ann.id, 1, ann.color)}
         </g>
       );
     });
