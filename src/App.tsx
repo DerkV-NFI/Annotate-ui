@@ -805,9 +805,10 @@ function AppContent() {
         <h1 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Forensic Annotator</h1>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'center' }}>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Project name:</span>
           <input
             type="text"
-            placeholder="Project Name..."
+            placeholder="Enter name..."
             value={projectName}
             onChange={(e) => setProjectName(e.target.value)}
             style={{
