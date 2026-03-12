@@ -247,10 +247,19 @@ export function ImagePanel({ panelId }: ImagePanelProps) {
     const clickPoint = { x: e.clientX, y: e.clientY };
     const imageCoord = screenToImageCoords(clickPoint, { scale, offset }, containerRect, imgSize);
 
+    const generateId = () => {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+      }
+      // Fallback for non-secure contexts (served via HTTP on some forensic setups)
+      return Math.random().toString(36).substring(2, 15) + 
+             Math.random().toString(36).substring(2, 15);
+    };
+
     if (!activeAnnotation || activeAnnotation.points.length === 0) {
       // First point
       const newAnn = {
-        id: crypto.randomUUID(),
+        id: generateId(),
         label: '1', // Will be auto-sequenced later based on length
         type: activeMarkerType,
         radius: activeMarkerType === 'area' ? 30 : undefined,
