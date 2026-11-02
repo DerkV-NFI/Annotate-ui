@@ -1,11 +1,13 @@
 import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Point, Transform } from '../utils/coordinates';
+import { generateId } from '../utils/id';
 
 export type MarkerType = 'point' | 'area';
 
 export interface AnnotationPoint {
   panelId: string;
+  imageId?: string;
   imageCoord: Point;
 }
 
@@ -15,7 +17,7 @@ export interface Annotation {
   type: MarkerType;
   radius?: number; // for legacy/rx (Panel 1)
   ry?: number;
-  rotation?: number; 
+  rotation?: number;
   radius2?: number; // for rx (Panel 2) if unlinked
   ry2?: number;
   rotation2?: number;
@@ -25,16 +27,27 @@ export interface Annotation {
   color: string;
 }
 
+export interface PanelImage {
+  id: string;
+  src: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  naturalWidth: number;
+  naturalHeight: number;
+}
+
 export type ToolMode = 'pan' | 'annotate';
 
 interface AppStateContextType {
   annotations: Annotation[];
   setAnnotations: React.Dispatch<React.SetStateAction<Annotation[]>>;
-  
+
   // The current annotation being drawn
   activeAnnotation: Annotation | null;
   setActiveAnnotation: React.Dispatch<React.SetStateAction<Annotation | null>>;
-  
+
   // Current tool mode
   toolMode: ToolMode;
   setToolMode: React.Dispatch<React.SetStateAction<ToolMode>>;
@@ -42,18 +55,18 @@ interface AppStateContextType {
   // Currently selected marker type for new annotations
   activeMarkerType: MarkerType;
   setActiveMarkerType: React.Dispatch<React.SetStateAction<MarkerType>>;
-  
+
   // We need to keep track of panel transforms and container rects globally
   // so the SVG overlay can draw lines correctly between them.
   panelTransforms: Record<string, Transform>;
   setPanelTransform: (panelId: string, transform: Transform) => void;
-  
+
   panelRects: Record<string, DOMRect | null>;
   setPanelRect: (panelId: string, rect: DOMRect | null) => void;
-  
+
   imageSizes: Record<string, { width: number, height: number } | null>;
   setImageSize: (panelId: string, size: { width: number, height: number } | null) => void;
-  
+
   workspaceRect: DOMRect | null;
   setWorkspaceRect: (rect: DOMRect | null) => void;
 
@@ -66,6 +79,16 @@ interface AppStateContextType {
   layoutMode: 'side-by-side' | 'top-bottom';
   setLayoutMode: (mode: 'side-by-side' | 'top-bottom' | ((prev: 'side-by-side' | 'top-bottom') => 'side-by-side' | 'top-bottom')) => void;
 
+  // Multiple images per panel
+  panelImages: Record<string, PanelImage[]>;
+  setPanelImages: React.Dispatch<React.SetStateAction<Record<string, PanelImage[]>>>;
+  selectedImageId: Record<string, string | null>;
+  setSelectedImageId: (panelId: string, imageId: string | null) => void;
+  addPanelImage: (panelId: string, image: Omit<PanelImage, 'id'>) => string;
+  updatePanelImage: (panelId: string, imageId: string, updates: Partial<PanelImage>) => void;
+  removePanelImage: (panelId: string, imageId: string) => void;
+
+  // Legacy single image compatibility
   imageSrcs: Record<string, string | null>;
   setImageSrc: (panelId: string, src: string | null) => void;
 
@@ -94,16 +117,6 @@ interface AppStateContextType {
   setProjectName: (name: string) => void;
 }
 
-export const getAlphabeticLabel = (index: number): string => {
-  let label = '';
-  let i = index;
-  while (i >= 0) {
-    label = String.fromCharCode((i % 26) + 65) + label;
-    i = Math.floor(i / 26) - 1;
-  }
-  return label;
-};
-
 const AppStateContext = createContext<AppStateContextType | undefined>(undefined);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
@@ -111,17 +124,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [activeAnnotation, setActiveAnnotation] = useState<Annotation | null>(null);
   const [toolMode, setToolMode] = useState<ToolMode>('pan');
   const [activeMarkerType, setActiveMarkerType] = useState<MarkerType>('point');
-  
+
   const [panelTransforms, setPanelTransforms] = useState<Record<string, Transform>>({
     '1': { scale: 1, offset: { x: 0, y: 0 } },
     '2': { scale: 1, offset: { x: 0, y: 0 } }
   });
-  
+
   const [panelRects, setPanelRects] = useState<Record<string, DOMRect | null>>({
     '1': null,
     '2': null
   });
-  
+
   const [imageSizes, setImageSizes] = useState<Record<string, { width: number, height: number } | null>>({
     '1': null,
     '2': null
@@ -139,6 +152,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setImageSizes(prev => ({ ...prev, [panelId]: size }));
   };
 
+  const [panelImages, setPanelImages] = useState<Record<string, PanelImage[]>>({
+    '1': [],
+    '2': []
+  });
+
+  const [selectedImageId, setSelectedImageIdState] = useState<Record<string, string | null>>({
+    '1': null,
+    '2': null
+  });
+
+  const setSelectedImageId = (panelId: string, imageId: string | null) => {
+    setSelectedImageIdState(prev => ({ ...prev, [panelId]: imageId }));
+  };
+
   const [workspaceRect, setWorkspaceRect] = useState<DOMRect | null>(null);
   const [lastUsedColor, setLastUsedColor] = useState<string>('var(--accent-color)');
   const [theme, setThemeState] = useState<'light' | 'dark'>(() => {
@@ -151,13 +178,67 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('forensic-theme', newTheme);
   };
   const [layoutMode, setLayoutMode] = useState<'side-by-side' | 'top-bottom'>('side-by-side');
-  const [imageSrcs, setImageSrcs] = useState<Record<string, string | null>>({
-    '1': null,
-    '2': null
-  });
+
+  const addPanelImage = (panelId: string, image: Omit<PanelImage, 'id'>): string => {
+    const id = generateId();
+    const newImage: PanelImage = { ...image, id };
+    setPanelImages(prev => ({
+      ...prev,
+      [panelId]: [...(prev[panelId] || []), newImage]
+    }));
+    setSelectedImageId(panelId, id);
+    setHasUnsavedChanges(true);
+    return id;
+  };
+
+  const updatePanelImage = (panelId: string, imageId: string, updates: Partial<PanelImage>) => {
+    setPanelImages(prev => ({
+      ...prev,
+      [panelId]: (prev[panelId] || []).map(img => img.id === imageId ? { ...img, ...updates } : img)
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  const removePanelImage = (panelId: string, imageId: string) => {
+    setPanelImages(prev => ({
+      ...prev,
+      [panelId]: (prev[panelId] || []).filter(img => img.id !== imageId)
+    }));
+    setSelectedImageIdState(prev => (prev[panelId] === imageId ? { ...prev, [panelId]: null } : prev));
+    // Clean up annotations linked to this image
+    setAnnotations(prev => prev.filter(ann => !ann.points.some(p => p.panelId === panelId && p.imageId === imageId)));
+    setHasUnsavedChanges(true);
+  };
+
+  // Provide imageSrcs mapped from panelImages for backwards compatibility
+  const imageSrcs: Record<string, string | null> = {
+    '1': panelImages['1']?.[0]?.src || null,
+    '2': panelImages['2']?.[0]?.src || null
+  };
 
   const setImageSrc = (panelId: string, src: string | null) => {
-    setImageSrcs(prev => ({ ...prev, [panelId]: src }));
+    if (!src) {
+      setPanelImages(prev => ({ ...prev, [panelId]: [] }));
+      setSelectedImageId(panelId, null);
+    } else {
+      const img = new Image();
+      img.onload = () => {
+        const id = generateId();
+        const newImg: PanelImage = {
+          id,
+          src,
+          x: -img.naturalWidth / 2,
+          y: -img.naturalHeight / 2,
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+          naturalWidth: img.naturalWidth,
+          naturalHeight: img.naturalHeight
+        };
+        setPanelImages(prev => ({ ...prev, [panelId]: [newImg] }));
+        setSelectedImageId(panelId, id);
+      };
+      img.src = src;
+    }
   };
 
   const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(null);
@@ -212,6 +293,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setLabelBgColor,
       layoutMode,
       setLayoutMode,
+      panelImages,
+      setPanelImages,
+      selectedImageId,
+      setSelectedImageId,
+      addPanelImage,
+      updatePanelImage,
+      removePanelImage,
       imageSrcs,
       setImageSrc,
       hasUnsavedChanges,
