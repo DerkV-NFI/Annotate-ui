@@ -3,8 +3,10 @@ import { domToPng } from 'modern-screenshot';
 import './index.css';
 import { ImagePanel } from './components/ImagePanel';
 import { SvgOverlay } from './components/SvgOverlay';
-import { AppStateProvider, useAppState, getAlphabeticLabel } from './state/AppStateContext';
+import { AppStateProvider, useAppState } from './state/AppStateContext';
+import { getAlphabeticLabel } from './utils/labels';
 import type { Annotation } from './state/AppStateContext';
+import type { Transform } from './utils/coordinates';
 
 function AnnotationListItem({
   ann,
@@ -204,14 +206,14 @@ function ResizePopover({
         onClick={() => {
           const nextLocked = !isLocked;
           const updates: Partial<Annotation> = { isLocked: nextLocked };
-          
+
           // When unlinking, copy current Panel 1 settings to Panel 2 for continuity
           if (!nextLocked) {
             updates.radius2 = ann.radius || 30;
             updates.ry2 = ann.ry || ann.radius || 30;
             updates.rotation2 = ann.rotation || 0;
           }
-          
+
           onUpdate(updates);
         }}
         style={{
@@ -415,6 +417,9 @@ function AppContent() {
     setLayoutMode,
     imageSrcs,
     setImageSrc,
+    panelImages,
+    setPanelImages,
+    setSelectedImageId,
     panelTransforms,
     setPanelTransform,
     annotations,
@@ -457,22 +462,22 @@ function AppContent() {
       isInitialMount.current = false;
       return;
     }
-    // Only set to true if not already true, to avoid recursive loops 
-    // though these deps are simple state values
     if (!hasUnsavedChanges) {
       setHasUnsavedChanges(true);
     }
   }, [
-    annotations, 
-    imageSrcs, 
-    layoutMode, 
-    labelType, 
-    labelFontSize, 
-    showLabelBackground, 
-    labelBgColor, 
-    labelColor, 
-    lineThickness, 
+    annotations,
+    panelImages,
+    imageSrcs,
+    layoutMode,
+    labelType,
+    labelFontSize,
+    showLabelBackground,
+    labelBgColor,
+    labelColor,
+    lineThickness,
     labelPosition,
+    hasUnsavedChanges,
     setHasUnsavedChanges,
     projectName,
     setProjectName
@@ -553,8 +558,8 @@ function AppContent() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    
-    const fileName = projectName.trim() 
+
+    const fileName = projectName.trim()
       ? `${projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.csv`
       : `forensic_annotations_${new Date().getTime()}.csv`;
 
@@ -673,8 +678,8 @@ function AppContent() {
 
         const finalUrl = canvas.toDataURL('image/png');
         const link = document.createElement('a');
-        
-        const fileName = projectName.trim() 
+
+        const fileName = projectName.trim()
           ? `${projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`
           : `forensic_report_${new Date().getTime()}.png`;
 
@@ -692,16 +697,20 @@ function AppContent() {
   };
 
   const resetToDefault = () => {
+    const hasImages = (panelImages['1'] && panelImages['1'].length > 0) || (panelImages['2'] && panelImages['2'].length > 0);
     if (hasUnsavedChanges) {
       const choice = confirm('Current project has unsaved changes. Save before starting a new project?\n\nOK = Save and Reset\nCancel = Discard and Reset');
       if (choice) {
         saveProject();
       }
-    } else if (annotations.length > 0 || Object.values(imageSrcs).some(s => s !== null)) {
+    } else if (annotations.length > 0 || hasImages) {
       if (!confirm('Start a new project? This will clear all current annotations and images.')) return;
     }
 
     setAnnotations([]);
+    setPanelImages({ '1': [], '2': [] });
+    setSelectedImageId('1', null);
+    setSelectedImageId('2', null);
     setImageSrc('1', null);
     setImageSrc('2', null);
     setProjectName('');
@@ -710,11 +719,12 @@ function AppContent() {
 
   const saveProject = () => {
     const projectData = {
-      version: '1.0.0',
+      version: '1.1.0',
       timestamp: new Date().toISOString(),
       projectName,
       state: {
         annotations,
+        panelImages,
         imageSrcs,
         panelTransforms,
         settings: {
@@ -733,8 +743,8 @@ function AppContent() {
     const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    
-    const fileName = projectName.trim() 
+
+    const fileName = projectName.trim()
       ? `${projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`
       : `forensic_project_${new Date().getTime()}.json`;
 
@@ -757,492 +767,495 @@ function AppContent() {
         if (data.state) {
           const { state } = data;
           if (state.annotations) setAnnotations(state.annotations);
-          if (state.imageSrcs) {
-            Object.entries(state.imageSrcs).forEach(([id, src]) => {
-              setImageSrc(id, src as string | null);
-            });
+            if (state.panelImages) {
+              setPanelImages(state.panelImages);
+            } else if (state.imageSrcs) {
+              // Legacy project support: convert imageSrcs to panelImages
+              Object.entries(state.imageSrcs).forEach(([id, src]) => {
+                setImageSrc(id, src as string | null);
+              });
+            }
+            if (state.panelTransforms) {
+              Object.entries(state.panelTransforms).forEach(([id, transform]) => {
+                setPanelTransform(id, transform as Transform);
+              });
+            }
+            if (state.settings) {
+              const { settings } = state;
+              if (settings.layoutMode) setLayoutMode(settings.layoutMode);
+              if (settings.labelType) setLabelType(settings.labelType);
+              if (settings.labelFontSize) setLabelFontSize(settings.labelFontSize);
+              if (settings.showLabelBackground !== undefined) setShowLabelBackground(settings.showLabelBackground);
+              if (settings.labelBgColor) setLabelBgColor(settings.labelBgColor);
+              if (settings.labelColor) setLabelColor(settings.labelColor);
+              if (settings.lineThickness) setLineThickness(settings.lineThickness);
+              if (settings.labelPosition) setLabelPosition(settings.labelPosition);
+            }
+            setHasUnsavedChanges(false);
           }
-          if (state.panelTransforms) {
-            Object.entries(state.panelTransforms).forEach(([id, transform]) => {
-              setPanelTransform(id, transform as any);
-            });
-          }
-          if (state.settings) {
-            const { settings } = state;
-            if (settings.layoutMode) setLayoutMode(settings.layoutMode);
-            if (settings.labelType) setLabelType(settings.labelType);
-            if (settings.labelFontSize) setLabelFontSize(settings.labelFontSize);
-            if (settings.showLabelBackground !== undefined) setShowLabelBackground(settings.showLabelBackground);
-            if (settings.labelBgColor) setLabelBgColor(settings.labelBgColor);
-            if (settings.labelColor) setLabelColor(settings.labelColor);
-            if (settings.lineThickness) setLineThickness(settings.lineThickness);
-            if (settings.labelPosition) setLabelPosition(settings.labelPosition);
-          }
-          setHasUnsavedChanges(false);
+        } catch (err) {
+          console.error('Failed to load project:', err);
+          alert('Failed to load project file. Invalid format.');
         }
-      } catch (err) {
-        console.error('Failed to load project:', err);
-        alert('Failed to load project file. Invalid format.');
-      }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
     };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
-      {/* Header / Tabs Area */}
-      <header style={{
-        height: '50px',
-        backgroundColor: 'var(--panel-bg)',
-        borderBottom: '1px solid var(--border-color)',
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 16px',
-        justifyContent: 'space-between',
-        zIndex: 50 // Above SVG overlay
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="5" cy="27" r="4.5" fill="#01689b"/>
-            <path d="M7 25L24 8" stroke="#01689b" stroke-width="3" stroke-linecap="round"/>
-            <path d="M18 6L28 4L26 14L18 6Z" fill="#01689b"/>
-          </svg>
-          <h1 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Forensic Annotator</h1>
-        </div>
-        
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'center' }}>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Project name:</span>
-          <input
-            type="text"
-            placeholder="Enter name..."
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-            style={{
-              backgroundColor: 'var(--bg-color)',
-              border: '1px solid var(--border-color)',
-              color: 'var(--text-main)',
-              padding: '6px 12px',
-              borderRadius: '4px',
-              fontSize: '0.9rem',
-              width: '200px',
-              outline: 'none'
-            }}
-          />
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button
-            onClick={resetToDefault}
-            style={{ ...buttonStyle, backgroundColor: '#95a5a6', color: 'white', border: 'none' }}
-            title="Start a new project (clear all)"
-          >
-            New Project
-          </button>
-          <button
-            onClick={saveProject}
-            style={{ ...buttonStyle, backgroundColor: '#2ecc71', color: 'white', border: 'none' }}
-            title="Save project (JSON)"
-          >
-            Save Project
-          </button>
-          <label
-            style={{ ...buttonStyle, backgroundColor: '#3498db', color: 'white', border: 'none', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
-            title="Load project (JSON)"
-          >
-            Load Project
-            <input type="file" accept=".json" onChange={loadProject} style={{ display: 'none' }} />
-          </label>
-          <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border-color)', margin: '0 8px' }} />
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            style={{ ...buttonStyle, backgroundColor: 'transparent', padding: '4px 8px', fontSize: '1.1rem' }}
-            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
-          >
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
-          <button
-            style={{ ...buttonStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '32px', padding: 0 }}
-            onClick={() => setLayoutMode(prev => prev === 'side-by-side' ? 'top-bottom' : 'side-by-side')}
-            title={`Switch to ${layoutMode === 'side-by-side' ? 'Top/Bottom' : 'Side-by-Side'} layout`}
-          >
-            {layoutMode === 'side-by-side' ? (
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="4" width="7" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" />
-                <rect x="11" y="4" width="7" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-            ) : (
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="2" width="12" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" />
-                <rect x="4" y="11" width="12" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-            )}
-          </button>
-        </div>
-      </header>
-
-      {/* Main Workspace Area */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-
-        {/* Sidebar */}
-        <aside style={{
-          width: '300px',
-          flexShrink: 0,
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
+        {/* Header / Tabs Area */}
+        <header style={{
+          height: '50px',
           backgroundColor: 'var(--panel-bg)',
-          borderRight: '1px solid var(--border-color)',
+          borderBottom: '1px solid var(--border-color)',
           display: 'flex',
-          flexDirection: 'column',
-          padding: '16px',
-          overflow: 'hidden'
+          alignItems: 'center',
+          padding: '0 16px',
+          justifyContent: 'space-between',
+          zIndex: 50 // Above SVG overlay
         }}>
-          <h2 style={{ fontSize: '1rem', marginBottom: '16px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Annotations</span>
-              <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>{annotations.length} total</span>
-            </div>
-            {annotations.length > 0 && (
-              <button
-                onClick={() => {
-                  if (confirm('Clear all annotations? This cannot be undone.')) {
-                    setAnnotations([]);
-                  }
-                }}
-                style={{
-                  alignSelf: 'flex-start',
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--danger-color)',
-                  cursor: 'pointer',
-                  fontSize: '0.75rem',
-                  padding: 0,
-                  opacity: 0.7
-                }}
-              >
-                Clear All
-              </button>
-            )}
-          </h2>
-
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-            <button
-              onClick={() => {
-                setToolMode('annotate');
-                setActiveMarkerType('point');
-              }}
-              style={{
-                ...buttonStyle,
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                backgroundColor: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--accent-hover)' : 'var(--panel-bg)',
-                border: (toolMode === 'annotate' && activeMarkerType === 'point') ? '1px solid var(--accent-color)' : '1px solid var(--border-color)'
-              }}
-              title="Add Point Annotation (1)"
-            >
-              <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--btn-text)' : 'var(--text-main)' }}>+</span>
-              <span style={{ fontSize: '1rem', color: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--btn-text)' : 'var(--text-main)' }}>↗</span>
-            </button>
-            <button
-              onClick={() => {
-                setToolMode('annotate');
-                setActiveMarkerType('area');
-              }}
-              style={{
-                ...buttonStyle,
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                backgroundColor: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--accent-hover)' : 'var(--panel-bg)',
-                border: (toolMode === 'annotate' && activeMarkerType === 'area') ? '1px solid var(--accent-color)' : '1px solid var(--border-color)'
-              }}
-              title="Add Area Annotation (2)"
-            >
-              <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--btn-text)' : 'var(--text-main)' }}>+</span>
-              <span style={{ fontSize: '1rem', color: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--btn-text)' : 'var(--text-main)' }}>○</span>
-            </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="5" cy="27" r="4.5" fill="#01689b" />
+              <path d="M7 25L24 8" stroke="#01689b" stroke-width="3" stroke-linecap="round" />
+              <path d="M18 6L28 4L26 14L18 6Z" fill="#01689b" />
+            </svg>
+            <h1 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Forensic Annotator</h1>
           </div>
 
-          {/* Annotation Settings Collapsible */}
-          <div style={{ marginBottom: '16px', border: '1px solid var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
-            <button
-              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'center' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Project name:</span>
+            <input
+              type="text"
+              placeholder="Enter name..."
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
               style={{
-                width: '100%',
-                padding: '8px 12px',
-                backgroundColor: 'var(--panel-bg)',
-                border: 'none',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                cursor: 'pointer',
+                backgroundColor: 'var(--bg-color)',
+                border: '1px solid var(--border-color)',
                 color: 'var(--text-main)',
-                fontSize: '0.85rem',
-                fontWeight: 'bold'
+                padding: '6px 12px',
+                borderRadius: '4px',
+                fontSize: '0.9rem',
+                width: '200px',
+                outline: 'none'
               }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={resetToDefault}
+              style={{ ...buttonStyle, backgroundColor: '#95a5a6', color: 'white', border: 'none' }}
+              title="Start a new project (clear all)"
             >
-              Annotation Settings
-              <span>{isSettingsOpen ? '▼' : '▶'}</span>
+              New Project
             </button>
+            <button
+              onClick={saveProject}
+              style={{ ...buttonStyle, backgroundColor: '#2ecc71', color: 'white', border: 'none' }}
+              title="Save project (JSON)"
+            >
+              Save Project
+            </button>
+            <label
+              style={{ ...buttonStyle, backgroundColor: '#3498db', color: 'white', border: 'none', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+              title="Load project (JSON)"
+            >
+              Load Project
+              <input type="file" accept=".json" onChange={loadProject} style={{ display: 'none' }} />
+            </label>
+            <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border-color)', margin: '0 8px' }} />
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              style={{ ...buttonStyle, backgroundColor: 'transparent', padding: '4px 8px', fontSize: '1.1rem' }}
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+            <button
+              style={{ ...buttonStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '32px', padding: 0 }}
+              onClick={() => setLayoutMode(prev => prev === 'side-by-side' ? 'top-bottom' : 'side-by-side')}
+              title={`Switch to ${layoutMode === 'side-by-side' ? 'Top/Bottom' : 'Side-by-Side'} layout`}
+            >
+              {layoutMode === 'side-by-side' ? (
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="2" y="4" width="7" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                  <rect x="11" y="4" width="7" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="4" y="2" width="12" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                  <rect x="4" y="11" width="12" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </header>
 
-            {isSettingsOpen && (
-              <div style={{ padding: '12px', backgroundColor: 'var(--panel-bg)', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border-color)' }}>
-                {/* Numbering Type */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>NUMBERING FORMAT</label>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    <button
-                      onClick={() => setLabelType('numeric')}
-                      style={{
-                        ...buttonStyle,
-                        flex: 1,
-                        fontSize: '0.7rem',
-                        padding: '4px',
-                        backgroundColor: labelType === 'numeric' ? 'var(--accent-color)' : 'transparent',
-                        color: labelType === 'numeric' ? 'var(--btn-text)' : 'var(--text-main)',
-                        borderColor: labelType === 'numeric' ? 'var(--accent-color)' : 'var(--border-color)'
-                      }}
-                    >
-                      1, 2, 3
-                    </button>
-                    <button
-                      onClick={() => setLabelType('alphabetic')}
-                      style={{
-                        ...buttonStyle,
-                        flex: 1,
-                        fontSize: '0.7rem',
-                        padding: '4px',
-                        backgroundColor: labelType === 'alphabetic' ? 'var(--accent-color)' : 'transparent',
-                        color: labelType === 'alphabetic' ? 'var(--btn-text)' : 'var(--text-main)',
-                        borderColor: labelType === 'alphabetic' ? 'var(--accent-color)' : 'var(--border-color)'
-                      }}
-                    >
-                      A, B, C
-                    </button>
-                  </div>
-                </div>
+        {/* Main Workspace Area */}
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
-                {/* Background Settings */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', cursor: 'pointer', userSelect: 'none' }}>
-                    <input
-                      type="checkbox"
-                      checked={showLabelBackground}
-                      onChange={(e) => setShowLabelBackground(e.target.checked)}
-                    />
-                    Label Background
-                  </label>
+          {/* Sidebar */}
+          <aside style={{
+            width: '300px',
+            flexShrink: 0,
+            backgroundColor: 'var(--panel-bg)',
+            borderRight: '1px solid var(--border-color)',
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '16px',
+            overflow: 'hidden'
+          }}>
+            <h2 style={{ fontSize: '1rem', marginBottom: '16px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Annotations</span>
+                <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>{annotations.length} total</span>
+              </div>
+              {annotations.length > 0 && (
+                <button
+                  onClick={() => {
+                    if (confirm('Clear all annotations? This cannot be undone.')) {
+                      setAnnotations([]);
+                    }
+                  }}
+                  style={{
+                    alignSelf: 'flex-start',
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--danger-color)',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    padding: 0,
+                    opacity: 0.7
+                  }}
+                >
+                  Clear All
+                </button>
+              )}
+            </h2>
 
-                  {showLabelBackground && (
-                    <SettingsColorSelection
-                      label="BACKGROUND COLOR"
-                      value={labelBgColor}
-                      onChange={setLabelBgColor}
-                    />
-                  )}
-                </div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <button
+                onClick={() => {
+                  setToolMode('annotate');
+                  setActiveMarkerType('point');
+                }}
+                style={{
+                  ...buttonStyle,
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  backgroundColor: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--accent-hover)' : 'var(--panel-bg)',
+                  border: (toolMode === 'annotate' && activeMarkerType === 'point') ? '1px solid var(--accent-color)' : '1px solid var(--border-color)'
+                }}
+                title="Add Point Annotation (1)"
+              >
+                <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--btn-text)' : 'var(--text-main)' }}>+</span>
+                <span style={{ fontSize: '1rem', color: (toolMode === 'annotate' && activeMarkerType === 'point') ? 'var(--btn-text)' : 'var(--text-main)' }}>↗</span>
+              </button>
+              <button
+                onClick={() => {
+                  setToolMode('annotate');
+                  setActiveMarkerType('area');
+                }}
+                style={{
+                  ...buttonStyle,
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  backgroundColor: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--accent-hover)' : 'var(--panel-bg)',
+                  border: (toolMode === 'annotate' && activeMarkerType === 'area') ? '1px solid var(--accent-color)' : '1px solid var(--border-color)'
+                }}
+                title="Add Area Annotation (2)"
+              >
+                <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--btn-text)' : 'var(--text-main)' }}>+</span>
+                <span style={{ fontSize: '1rem', color: (toolMode === 'annotate' && activeMarkerType === 'area') ? 'var(--btn-text)' : 'var(--text-main)' }}>○</span>
+              </button>
+            </div>
 
-                {/* Text Color Selection */}
-                <SettingsColorSelection
-                  label="TEXT COLOR"
-                  value={labelColor}
-                  onChange={setLabelColor}
-                />
+            {/* Annotation Settings Collapsible */}
+            <div style={{ marginBottom: '16px', border: '1px solid var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
+              <button
+                onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  backgroundColor: 'var(--panel-bg)',
+                  border: 'none',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                  color: 'var(--text-main)',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold'
+                }}
+              >
+                Annotation Settings
+                <span>{isSettingsOpen ? '▼' : '▶'}</span>
+              </button>
 
-                <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
-
-                {/* Font Size */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>LABEL SIZE</label>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-main)' }}>{labelFontSize}px</span>
-                  </div>
-                  <input
-                    type="range" min="8" max="24" value={labelFontSize}
-                    onChange={(e) => setLabelFontSize(parseInt(e.target.value))}
-                    style={{ width: '100%', accentColor: 'var(--accent-color)' }}
-                  />
-                </div>
-
-                {/* Line Thickness */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>LINE WEIGHT</label>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-main)' }}>{lineThickness}px</span>
-                  </div>
-                  <input
-                    type="range" min="1" max="5" step="0.5" value={lineThickness}
-                    onChange={(e) => setLineThickness(parseFloat(e.target.value))}
-                    style={{ width: '100%', accentColor: 'var(--accent-color)' }}
-                  />
-                </div>
-
-                {/* Label Position */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>LABEL POSITION</label>
-                  <div style={{ display: 'flex', gap: '2px' }}>
-                    {(['image1', 'center', 'image2'] as const).map(pos => (
+              {isSettingsOpen && (
+                <div style={{ padding: '12px', backgroundColor: 'var(--panel-bg)', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border-color)' }}>
+                  {/* Numbering Type */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>NUMBERING FORMAT</label>
+                    <div style={{ display: 'flex', gap: '4px' }}>
                       <button
-                        key={pos}
-                        onClick={() => setLabelPosition(pos)}
+                        onClick={() => setLabelType('numeric')}
                         style={{
                           ...buttonStyle,
                           flex: 1,
-                          fontSize: '0.65rem',
-                          padding: '4px 2px',
-                          backgroundColor: labelPosition === pos ? 'var(--accent-color)' : 'transparent',
-                          color: labelPosition === pos ? 'var(--btn-text)' : 'var(--text-main)',
-                          borderColor: labelPosition === pos ? 'var(--accent-color)' : 'var(--border-color)',
-                          textTransform: 'capitalize'
+                          fontSize: '0.7rem',
+                          padding: '4px',
+                          backgroundColor: labelType === 'numeric' ? 'var(--accent-color)' : 'transparent',
+                          color: labelType === 'numeric' ? 'var(--btn-text)' : 'var(--text-main)',
+                          borderColor: labelType === 'numeric' ? 'var(--accent-color)' : 'var(--border-color)'
                         }}
                       >
-                        {pos === 'image1' ? 'Img 1' : pos === 'image2' ? 'Img 2' : 'Center'}
+                        1, 2, 3
                       </button>
-                    ))}
+                      <button
+                        onClick={() => setLabelType('alphabetic')}
+                        style={{
+                          ...buttonStyle,
+                          flex: 1,
+                          fontSize: '0.7rem',
+                          padding: '4px',
+                          backgroundColor: labelType === 'alphabetic' ? 'var(--accent-color)' : 'transparent',
+                          color: labelType === 'alphabetic' ? 'var(--btn-text)' : 'var(--text-main)',
+                          borderColor: labelType === 'alphabetic' ? 'var(--accent-color)' : 'var(--border-color)'
+                        }}
+                      >
+                        A, B, C
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Background Settings */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', cursor: 'pointer', userSelect: 'none' }}>
+                      <input
+                        type="checkbox"
+                        checked={showLabelBackground}
+                        onChange={(e) => setShowLabelBackground(e.target.checked)}
+                      />
+                      Label Background
+                    </label>
+
+                    {showLabelBackground && (
+                      <SettingsColorSelection
+                        label="BACKGROUND COLOR"
+                        value={labelBgColor}
+                        onChange={setLabelBgColor}
+                      />
+                    )}
+                  </div>
+
+                  {/* Text Color Selection */}
+                  <SettingsColorSelection
+                    label="TEXT COLOR"
+                    value={labelColor}
+                    onChange={setLabelColor}
+                  />
+
+                  <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
+
+                  {/* Font Size */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>LABEL SIZE</label>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-main)' }}>{labelFontSize}px</span>
+                    </div>
+                    <input
+                      type="range" min="8" max="24" value={labelFontSize}
+                      onChange={(e) => setLabelFontSize(parseInt(e.target.value))}
+                      style={{ width: '100%', accentColor: 'var(--accent-color)' }}
+                    />
+                  </div>
+
+                  {/* Line Thickness */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>LINE WEIGHT</label>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-main)' }}>{lineThickness}px</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="5" step="0.5" value={lineThickness}
+                      onChange={(e) => setLineThickness(parseFloat(e.target.value))}
+                      style={{ width: '100%', accentColor: 'var(--accent-color)' }}
+                    />
+                  </div>
+
+                  {/* Label Position */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>LABEL POSITION</label>
+                    <div style={{ display: 'flex', gap: '2px' }}>
+                      {(['image1', 'center', 'image2'] as const).map(pos => (
+                        <button
+                          key={pos}
+                          onClick={() => setLabelPosition(pos)}
+                          style={{
+                            ...buttonStyle,
+                            flex: 1,
+                            fontSize: '0.65rem',
+                            padding: '4px 2px',
+                            backgroundColor: labelPosition === pos ? 'var(--accent-color)' : 'transparent',
+                            color: labelPosition === pos ? 'var(--btn-text)' : 'var(--text-main)',
+                            borderColor: labelPosition === pos ? 'var(--accent-color)' : 'var(--border-color)',
+                            textTransform: 'capitalize'
+                          }}
+                        >
+                          {pos === 'image1' ? 'Img 1' : pos === 'image2' ? 'Img 2' : 'Center'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
+              )}
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {annotations.length === 0 ? (
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>
+                  No annotations yet. <br />Use the "Add Annotation" tool above.
+                </p>
+              ) : (
+                annotations.map((ann, index) => {
+                  const displayLabel = labelType === 'alphabetic' ? getAlphabeticLabel(index) : (index + 1).toString();
+                  return (
+                    <AnnotationListItem
+                      key={ann.id}
+                      ann={ann}
+                      displayLabel={displayLabel}
+                      isFirst={index === 0}
+                      isLast={index === annotations.length - 1}
+                      isNew={index === annotations.length - 1 && annotations.length > prevAnnotationsCount.current}
+                      onDelete={() => {
+                        setAnnotations(prev => prev.filter(a => a.id !== ann.id));
+                      }}
+                      onChangeText={(text) => {
+                        setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, text } : a));
+                      }}
+                      onChangeColor={(color) => {
+                        setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, color } : a));
+                        setLastUsedColor(color);
+                      }}
+                      onMoveUp={() => moveAnnotation(index, 'up')}
+                      onMoveDown={() => moveAnnotation(index, 'down')}
+                    />
+                  );
+                })
+              )}
+              {/* Capture the count for next render */}
+              {(() => { prevAnnotationsCount.current = annotations.length; return null; })()}
+            </div>
+
+            {annotations.length > 0 && (
+              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button
+                  disabled={isExporting}
+                  onClick={exportVisual}
+                  style={{ ...buttonStyle, width: '100%' }}
+                >
+                  {isExporting ? 'Exporting...' : 'Export Image'}
+                </button>
+                <button
+                  onClick={exportCSV}
+                  style={{ ...buttonStyle, width: '100%', backgroundColor: 'transparent', color: 'var(--accent-color)' }}
+                >
+                  Export CSV Data
+                </button>
               </div>
             )}
-          </div>
+          </aside>
 
-          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {annotations.length === 0 ? (
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>
-                No annotations yet. <br />Use the "Add Annotation" tool above.
-              </p>
-            ) : (
-              annotations.map((ann, index) => {
-                const displayLabel = labelType === 'alphabetic' ? getAlphabeticLabel(index) : (index + 1).toString();
-                return (
-                  <AnnotationListItem
-                    key={ann.id}
-                    ann={ann}
-                    displayLabel={displayLabel}
-                    isFirst={index === 0}
-                    isLast={index === annotations.length - 1}
-                    isNew={index === annotations.length - 1 && annotations.length > prevAnnotationsCount.current}
-                    onDelete={() => {
-                      setAnnotations(prev => prev.filter(a => a.id !== ann.id));
-                    }}
-                    onChangeText={(text) => {
-                      setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, text } : a));
-                    }}
-                    onChangeColor={(color) => {
-                      setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, color } : a));
-                      setLastUsedColor(color);
-                    }}
-                    onMoveUp={() => moveAnnotation(index, 'up')}
-                    onMoveDown={() => moveAnnotation(index, 'down')}
-                  />
-                );
-              })
+          {/* Dual Panel Layout */}
+          <main
+            ref={mainRef}
+            data-transparent-on-export="true"
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: layoutMode === 'side-by-side' ? 'row' : 'column',
+              position: 'relative',
+              backgroundColor: 'var(--bg-color)', // Themed background
+              minWidth: 0,
+              minHeight: 0,
+              userSelect: 'none'
+            }}
+          >
+            {/* Panel 1 */}
+            <div data-transparent-on-export="true" style={{ flex: '1 1 0%', display: 'flex', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
+              <ImagePanel panelId="1" />
+            </div>
+
+            {/* Divider */}
+            <div data-html2canvas-ignore="true" style={dividerStyle(layoutMode)}></div>
+
+            {/* Panel 2 */}
+            <div data-transparent-on-export="true" style={{ flex: '1 1 0%', display: 'flex', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
+              <ImagePanel panelId="2" />
+            </div>
+
+            {/* SVG Overlay */}
+            <svg style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              pointerEvents: 'none', // Restored to none so panels can receive drag/drop
+              zIndex: 40 // Below header (50), above panels
+            }}>
+              <SvgOverlay />
+            </svg>
+
+            {editingAnn && (
+              <div data-html2canvas-ignore="true">
+                <ResizePopover
+                  ann={editingAnn}
+                  onUpdate={(updates) => {
+                    setAnnotations(prev => prev.map(a => a.id === editingAnn.id ? { ...a, ...updates } : a));
+                  }}
+                  onClose={() => setEditingAnnotationId(null)}
+                />
+              </div>
             )}
-            {/* Capture the count for next render */}
-            {(() => { prevAnnotationsCount.current = annotations.length; return null; })()}
-          </div>
-
-          {annotations.length > 0 && (
-            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button
-                disabled={isExporting}
-                onClick={exportVisual}
-                style={{ ...buttonStyle, width: '100%' }}
-              >
-                {isExporting ? 'Exporting...' : 'Export High-Qual Image'}
-              </button>
-              <button
-                onClick={exportCSV}
-                style={{ ...buttonStyle, width: '100%', backgroundColor: 'transparent', color: 'var(--accent-color)' }}
-              >
-                Export CSV Data
-              </button>
-            </div>
-          )}
-        </aside>
-
-        {/* Dual Panel Layout */}
-        <main
-          ref={mainRef}
-          data-transparent-on-export="true"
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: layoutMode === 'side-by-side' ? 'row' : 'column',
-            position: 'relative',
-            backgroundColor: 'var(--bg-color)', // Themed background
-            minWidth: 0,
-            minHeight: 0,
-            userSelect: 'none'
-          }}
-        >
-          {/* Panel 1 */}
-          <div data-transparent-on-export="true" style={{ flex: '1 1 0%', display: 'flex', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
-            <ImagePanel panelId="1" />
-          </div>
-
-          {/* Divider */}
-          <div data-html2canvas-ignore="true" style={dividerStyle(layoutMode)}></div>
-
-          {/* Panel 2 */}
-          <div data-transparent-on-export="true" style={{ flex: '1 1 0%', display: 'flex', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
-            <ImagePanel panelId="2" />
-          </div>
-
-          {/* SVG Overlay */}
-          <svg style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            pointerEvents: 'none', // Restored to none so panels can receive drag/drop
-            zIndex: 40 // Below header (50), above panels
-          }}>
-            <SvgOverlay />
-          </svg>
-
-          {editingAnn && (
-            <div data-html2canvas-ignore="true">
-              <ResizePopover
-                ann={editingAnn}
-                onUpdate={(updates) => {
-                  setAnnotations(prev => prev.map(a => a.id === editingAnn.id ? { ...a, ...updates } : a));
-                }}
-                onClose={() => setEditingAnnotationId(null)}
-              />
-            </div>
-          )}
-        </main>
+          </main>
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
-function App() {
-  return (
-    <AppStateProvider>
-      <AppContent />
-    </AppStateProvider>
-  );
-}
+  function App() {
+    return (
+      <AppStateProvider>
+        <AppContent />
+      </AppStateProvider>
+    );
+  }
 
-const buttonStyle: React.CSSProperties = {
-  backgroundColor: 'var(--accent-color)',
-  color: 'var(--btn-text)',
-  border: '1px solid var(--border-color)',
-  padding: '6px 12px',
-  borderRadius: '4px',
-  cursor: 'pointer',
-  fontSize: '0.85rem',
-  transition: 'all 0.2s'
-};
+  const buttonStyle: React.CSSProperties = {
+    backgroundColor: 'var(--accent-color)',
+    color: 'var(--btn-text)',
+    border: '1px solid var(--border-color)',
+    padding: '6px 12px',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '0.85rem',
+    transition: 'all 0.2s'
+  };
 
-const dividerStyle = (mode: 'side-by-side' | 'top-bottom'): React.CSSProperties => ({
-  backgroundColor: 'var(--border-color)',
-  ...(mode === 'side-by-side' ? { width: '2px', height: '100%', cursor: 'col-resize' } : { height: '2px', width: '100%', cursor: 'row-resize' })
-});
+  const dividerStyle = (mode: 'side-by-side' | 'top-bottom'): React.CSSProperties => ({
+    backgroundColor: 'var(--border-color)',
+    ...(mode === 'side-by-side' ? { width: '2px', height: '100%', cursor: 'col-resize' } : { height: '2px', width: '100%', cursor: 'row-resize' })
+  });
 
-export default App;
+  export default App;
