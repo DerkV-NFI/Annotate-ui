@@ -1,73 +1,80 @@
-# React + TypeScript + Vite
+# Forensic Image Annotation Tool
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A browser-based tool for forensic image comparison. Load images into two side-by-side windows, pan and zoom them, and draw linked markers (points or areas) between corresponding features. The result can be exported as an image, a CSV, or a project file.
 
-Currently, two official plugins are available:
+**Everything runs locally in your browser.** Images are never uploaded to a server.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Install
 
-## React Compiler
+### Prerequisites
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- [Node.js](https://nodejs.org/) 20.19 or newer (or 22.12+), with npm. Vite 7 requires one of these.
 
-## Expanding the ESLint configuration
+### Steps
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+```powershell
+# 1. Clone the repository and enter it
+git clone <repository-url>
+cd Annotate-ui
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+# 2. Install dependencies
+npm install
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# 3. Start the development server
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open the URL printed in the terminal (usually http://localhost:5173).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Other commands
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+| Command           | Description                                              |
+| ----------------- | -------------------------------------------------------- |
+| `npm run dev`     | Start the dev server with hot reload                     |
+| `npm run build`   | Type-check and create a production build in `dist/`      |
+| `npm run preview` | Serve the production build locally                       |
+| `npm run lint`    | Run ESLint                                               |
+
+The `dist/` folder is static and can be served by any web server.
+
+## Features
+
+### Image windows
+- Two windows (Image 1 and Image 2) for comparing images.
+- Load images by drag and drop or by clicking to browse. Multiple files can be selected at once.
+- Load more images into a window at any time with the **+ Add Image** button.
+- In pan mode, click an image to select it, then:
+  - drag it to move it;
+  - drag a corner handle to resize it (aspect ratio is kept);
+  - click the red trash button at its top-right corner to delete it. Annotations linked to that image are removed too.
+- Switch between **side-by-side** and **top/bottom** layouts.
+
+### Navigation
+- Scroll wheel zooms, anchored at the cursor.
+- Drag empty space (or use the middle mouse button) to pan a window.
+- **1:1** resets to actual size; **Fit** fits all images in the window.
+
+### Annotations
+- Click a feature in one window, then the matching feature in the other, to create a linked annotation.
+- Marker types:
+  - **Point**: an arrow ends exactly on the pixel, with no dot covering it.
+  - **Area**: an ellipse with adjustable size and rotation; it can be locked or unlinked between the two windows.
+- Markers stay attached to the image pixel they were placed on, even when you move, resize or zoom the image.
+- Drag marker handles to adjust positions. Click a marker to edit it.
+- Each annotation has a text note, a colour, and can be reordered or deleted from the sidebar.
+
+### Appearance settings
+- Numeric (1, 2, 3) or alphabetic (A, B, C) labels.
+- Label font size, text colour, optional background and background colour, and label position (Image 1, Center, Image 2).
+- Line thickness.
+- Light and dark theme.
+
+### Saving and exporting
+- **Save Project / Load Project**: stores images, annotations and settings in a single JSON file. Older single-image project files still load.
+- **Export Image**: PNG of both windows with the annotations (selection handles and controls are excluded), cropped to the content.
+- **Export CSV Data**: annotation labels and notes.
+- **New Project** clears everything and warns about unsaved changes.
+
+## Tech stack
+
+React 19, TypeScript, Vite 7, SVG overlay for markers, and [modern-screenshot](https://github.com/qq15725/modern-screenshot) for image export.
