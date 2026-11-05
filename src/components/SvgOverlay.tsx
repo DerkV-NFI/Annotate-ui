@@ -28,10 +28,24 @@ export function SvgOverlay() {
   const [dragState, setDragState] = React.useState<{ annId: string, pointIndex: number } | null>(null);
   const [hoveredAnnId, setHoveredAnnId] = React.useState<string | null>(null);
   const isDraggingRef = React.useRef(false);
+  const isPreviewingAnnotation = activeAnnotation?.points.length === 1;
 
   React.useEffect(() => {
+    if (!dragState && !isPreviewingAnnotation) return;
+
+    let pendingMousePos: Point | null = null;
+    let animationFrameId: number | null = null;
+
     const handleMouseMove = (e: MouseEvent) => {
-      setMousePos({ x: e.clientX, y: e.clientY });
+      if (isPreviewingAnnotation) {
+        pendingMousePos = { x: e.clientX, y: e.clientY };
+        if (animationFrameId === null) {
+          animationFrameId = requestAnimationFrame(() => {
+            if (pendingMousePos) setMousePos(pendingMousePos);
+            animationFrameId = null;
+          });
+        }
+      }
 
       if (dragState) {
         if (!isDraggingRef.current) isDraggingRef.current = true;
@@ -108,10 +122,11 @@ export function SvgOverlay() {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
       return () => {
+        if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
       };
-}, [dragState, panelRects, panelTransforms, panelImages, imageSizes, setAnnotations]);
+}, [dragState, isPreviewingAnnotation, panelRects, panelTransforms, panelImages, imageSizes, setAnnotations]);
 
 // Helper to convert an AnnotationPoint to global screen coordinates
 const getScreenCoordinates = (pt: AnnotationPoint): Point | null => {
