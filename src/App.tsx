@@ -5,8 +5,18 @@ import { ImagePanel } from './components/ImagePanel';
 import { SvgOverlay } from './components/SvgOverlay';
 import { AppStateProvider, useAppState } from './state/AppStateContext';
 import { getAlphabeticLabel } from './utils/labels';
-import type { Annotation } from './state/AppStateContext';
+import type { Annotation, PanelImage } from './state/AppStateContext';
 import type { Transform } from './utils/coordinates';
+
+const blobToDataUrl = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (typeof reader.result === 'string') resolve(reader.result);
+    else reject(new Error('Failed to serialize image data.'));
+  };
+  reader.onerror = () => reject(reader.error ?? new Error('Failed to read image data.'));
+  reader.readAsDataURL(blob);
+});
 
 function AnnotationListItem({
   ann,
@@ -724,42 +734,62 @@ function AppContent() {
     setHasUnsavedChanges(false);
   };
 
-  const saveProject = () => {
-    const projectData = {
-      version: '1.1.0',
-      timestamp: new Date().toISOString(),
-      projectName,
-      state: {
-        annotations,
-        panelImages,
-        imageSrcs,
-        panelTransforms,
-        settings: {
-          layoutMode,
-          labelType,
-          labelFontSize,
-          showLabelBackground,
-          labelBgColor,
-          labelColor,
-          lineThickness,
-          labelPosition
+  const saveProject = async () => {
+    try {
+      const serializedPanelImages: Record<string, Omit<PanelImage, 'sourceFile'>[]> = {};
+      for (const [panelId, images] of Object.entries(panelImages)) {
+        serializedPanelImages[panelId] = [];
+        for (const image of images) {
+          const { sourceFile, ...serializableImage } = image;
+          serializedPanelImages[panelId].push({
+            ...serializableImage,
+            src: sourceFile ? await blobToDataUrl(sourceFile) : image.src
+          });
         }
       }
-    };
 
-    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+      const serializedImageSrcs = Object.fromEntries(
+        Object.entries(serializedPanelImages).map(([panelId, images]) => [panelId, images[0]?.src ?? null])
+      );
+      const projectData = {
+        version: '1.1.0',
+        timestamp: new Date().toISOString(),
+        projectName,
+        state: {
+          annotations,
+          panelImages: serializedPanelImages,
+          imageSrcs: serializedImageSrcs,
+          panelTransforms,
+          settings: {
+            layoutMode,
+            labelType,
+            labelFontSize,
+            showLabelBackground,
+            labelBgColor,
+            labelColor,
+            lineThickness,
+            labelPosition
+          }
+        }
+      };
 
-    const fileName = projectName.trim()
-      ? `${projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`
-      : `forensic_project_${new Date().getTime()}.json`;
+      const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
 
-    link.href = url;
-    link.download = fileName;
-    link.click();
-    URL.revokeObjectURL(url);
-    setHasUnsavedChanges(false);
+      const fileName = projectName.trim()
+        ? `${projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`
+        : `forensic_project_${new Date().getTime()}.json`;
+
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+      setHasUnsavedChanges(false);
+    } catch (err) {
+      console.error('Failed to save project:', err);
+      alert('Failed to save project file.');
+    }
   };
 
   const loadProject = (e: React.ChangeEvent<HTMLInputElement>) => {

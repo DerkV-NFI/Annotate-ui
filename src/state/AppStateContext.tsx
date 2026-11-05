@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Point, Transform } from '../utils/coordinates';
 import { generateId } from '../utils/id';
@@ -36,6 +36,7 @@ export interface PanelImage {
   height: number;
   naturalWidth: number;
   naturalHeight: number;
+  sourceFile?: Blob;
 }
 
 export type ToolMode = 'pan' | 'annotate';
@@ -156,6 +157,25 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     '1': [],
     '2': []
   });
+  const managedObjectUrls = useRef(new Set<string>());
+
+  useEffect(() => {
+    const currentUrls = new Set(
+      Object.values(panelImages)
+        .flat()
+        .map(image => image.src)
+        .filter(src => src.startsWith('blob:'))
+    );
+
+    managedObjectUrls.current.forEach(url => {
+      if (!currentUrls.has(url)) URL.revokeObjectURL(url);
+    });
+    managedObjectUrls.current = currentUrls;
+  }, [panelImages]);
+
+  useEffect(() => () => {
+    managedObjectUrls.current.forEach(url => URL.revokeObjectURL(url));
+  }, []);
 
   const [selectedImageId, setSelectedImageIdState] = useState<Record<string, string | null>>({
     '1': null,

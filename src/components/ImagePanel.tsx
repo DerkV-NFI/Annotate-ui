@@ -91,40 +91,39 @@ const processFiles = useCallback((files: FileList | File[]) => {
   if (fileArray.length === 0) return;
 
   fileArray.forEach((file, index) => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const src = event.target?.result as string;
-      if (!src) return;
+    const src = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const natW = img.naturalWidth;
+      const natH = img.naturalHeight;
+      const containerRect = containerRef.current?.getBoundingClientRect();
+      const maxW = containerRect ? containerRect.width * 0.75 : 400;
+      const maxH = containerRect ? containerRect.height * 0.75 : 400;
+      const fitRatio = Math.min(maxW / natW, maxH / natH, 1);
+      const width = Math.max(50, Math.round(natW * fitRatio));
+      const height = Math.max(50, Math.round(natH * fitRatio));
 
-      const img = new Image();
-      img.onload = () => {
-        const natW = img.naturalWidth;
-        const natH = img.naturalHeight;
-        const containerRect = containerRef.current?.getBoundingClientRect();
-        const maxW = containerRect ? containerRect.width * 0.75 : 400;
-        const maxH = containerRect ? containerRect.height * 0.75 : 400;
-        const fitRatio = Math.min(maxW / natW, maxH / natH, 1);
-        const width = Math.max(50, Math.round(natW * fitRatio));
-        const height = Math.max(50, Math.round(natH * fitRatio));
+      // Position offset: stagger new images so they don't completely overlap
+      const existingCount = (panelImages[panelId] || []).length + index;
+      const x = existingCount === 0 ? -width / 2 : (-width / 2 + (existingCount % 6) * 35);
+      const y = existingCount === 0 ? -height / 2 : (-height / 2 + (existingCount % 6) * 35);
 
-        // Position offset: stagger new images so they don't completely overlap
-        const existingCount = (panelImages[panelId] || []).length + index;
-        const x = existingCount === 0 ? -width / 2 : (-width / 2 + (existingCount % 6) * 35);
-        const y = existingCount === 0 ? -height / 2 : (-height / 2 + (existingCount % 6) * 35);
-
-        addPanelImage(panelId, {
-          src,
-          x,
-          y,
-          width,
-          height,
-          naturalWidth: natW,
-          naturalHeight: natH
-        });
-      };
-      img.src = src;
+      addPanelImage(panelId, {
+        src,
+        sourceFile: file,
+        x,
+        y,
+        width,
+        height,
+        naturalWidth: natW,
+        naturalHeight: natH
+      });
     };
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(src);
+      console.error(`Failed to load image file "${file.name}".`);
+    };
+    img.src = src;
   });
 }, [addPanelImage, panelId, panelImages]);
 
