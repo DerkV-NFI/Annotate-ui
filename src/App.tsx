@@ -588,6 +588,7 @@ function AppContent() {
   const exportVisual = async () => {
     if (!mainRef.current) return;
     setIsExporting(true);
+    const originalBgs = new Map<HTMLElement, string>();
     try {
       const main = mainRef.current;
       const mainRect = main.getBoundingClientRect();
@@ -648,7 +649,6 @@ function AppContent() {
 
       // 3. Temporarily strip all backgrounds for true transparency
       const nodesWithBg = main.querySelectorAll('[data-transparent-on-export="true"]');
-      const originalBgs = new Map<HTMLElement, string>();
 
       const setTransparent = (el: HTMLElement) => {
         originalBgs.set(el, el.style.backgroundColor);
@@ -670,45 +670,46 @@ function AppContent() {
         }
       });
 
-      // Restore backgrounds immediately
-      originalBgs.forEach((bg, el) => { el.style.backgroundColor = bg; });
-
       // 5. Crop the resulting image to our calculated bounds
       const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Failed to decode exported image.'));
+        img.src = dataUrl;
+      });
 
-        // Coordinates are relative to main container
-        const cropX = minX - mainRect.left;
-        const cropY = minY - mainRect.top;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Failed to create export canvas context.');
 
-        canvas.width = width * 2;
-        canvas.height = height * 2;
+      // Coordinates are relative to main container
+      const cropX = minX - mainRect.left;
+      const cropY = minY - mainRect.top;
 
-        ctx.drawImage(
-          img,
-          cropX * 2, cropY * 2, width * 2, height * 2, // Source (at scale 2)
-          0, 0, width * 2, height * 2                  // Destination
-        );
+      canvas.width = width * 2;
+      canvas.height = height * 2;
 
-        const finalUrl = canvas.toDataURL('image/png');
-        const link = document.createElement('a');
+      ctx.drawImage(
+        img,
+        cropX * 2, cropY * 2, width * 2, height * 2, // Source (at scale 2)
+        0, 0, width * 2, height * 2                  // Destination
+      );
 
-        const fileName = projectName.trim()
-          ? `${projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`
-          : `forensic_report_${new Date().getTime()}.png`;
+      const finalUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
 
-        link.href = finalUrl;
-        link.download = fileName;
-        link.click();
-        setIsExporting(false);
-      };
-      img.src = dataUrl;
+      const fileName = projectName.trim()
+        ? `${projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`
+        : `forensic_report_${new Date().getTime()}.png`;
+
+      link.href = finalUrl;
+      link.download = fileName;
+      link.click();
 
     } catch (err) {
       console.error('Export failed:', err);
+    } finally {
+      originalBgs.forEach((bg, el) => { el.style.backgroundColor = bg; });
       setIsExporting(false);
     }
   };
