@@ -863,8 +863,9 @@ function AppContent() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'center' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Project name:</span>
+            <label htmlFor="project-name" style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Project name:</label>
             <input
+              id="project-name"
               type="text"
               placeholder="Enter name..."
               value={projectName}
@@ -876,8 +877,7 @@ function AppContent() {
                 padding: '6px 12px',
                 borderRadius: '4px',
                 fontSize: '0.9rem',
-                width: '200px',
-                outline: 'none'
+                width: '200px'
               }}
             />
           </div>
@@ -898,11 +898,12 @@ function AppContent() {
               Save Project
             </button>
             <label
+              className="load-project-control"
               style={{ ...buttonStyle, backgroundColor: '#3498db', color: 'white', border: 'none', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
               title="Load project (JSON)"
             >
               Load Project
-              <input type="file" accept=".json" onChange={loadProject} style={{ display: 'none' }} />
+              <input className="visually-hidden-file-input" type="file" accept=".json" onChange={loadProject} />
             </label>
             <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border-color)', margin: '0 8px' }} />
             <button
