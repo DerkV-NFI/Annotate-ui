@@ -537,12 +537,19 @@ function AppContent() {
 
   const exportCSV = () => {
     const headers = ['Label', 'Type', 'Description', 'Image 1 X', 'Image 1 Y', 'Image 2 X', 'Image 2 Y'];
+    const escapeCsvCell = (value: string, untrusted = false) => {
+      const safeValue = untrusted && /^[\s]*[=+\-@＝＋－＠]/u.test(value)
+        ? `'${value}`
+        : value;
+      return `"${safeValue.replace(/"/g, '""')}"`;
+    };
+
     const rows = annotations.map((ann, idx) => {
       const displayLabel = labelType === 'alphabetic' ? getAlphabeticLabel(idx) : (idx + 1).toString();
       return [
         displayLabel,
         ann.type,
-        ann.text.replace(/"/g, '""'),
+        ann.text,
         ann.points[0]?.imageCoord.x.toFixed(2) || '',
         ann.points[0]?.imageCoord.y.toFixed(2) || '',
         ann.points[1]?.imageCoord.x.toFixed(2) || '',
@@ -551,8 +558,8 @@ function AppContent() {
     });
 
     const csvContent = [
-      headers.join(','),
-      ...rows.map(r => r.map(cell => `"${cell}"`).join(','))
+      headers.map(cell => escapeCsvCell(cell)).join(','),
+      ...rows.map(r => r.map((cell, index) => escapeCsvCell(cell, index === 1 || index === 2)).join(','))
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
